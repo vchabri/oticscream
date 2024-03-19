@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Copyright (C) EDF 2023
+Copyright (C) EDF 2024
 
 @author: Vincent Chabridon
 """

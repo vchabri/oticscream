@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Copyright (C) EDF 2023
+Copyright (C) EDF 2024
 
 @author: Vincent Chabridon
 """
@@ -65,412 +65,357 @@ class Icscream:
 
     def __init__(
         self,
-        dataset=None,
-        scenario_variables_columns=None,
-        random_variables_columns=None,
-        output_variable_column=None,
+        df_scenario=None,
+        df_aleatory=None,
+        df_output=None,
         covariance_collection=None,
         output_quantile_order=0.9,
         p_value_threshold=0.05,
         n_perm=200,
-        figpath="",
     ):
         if (
-            (scenario_variables_columns is None)
-            or (random_variables_columns is None)
-            or (output_variable_column is None)
+            (df_scenario is None)
+            or (df_aleatory is None)
+            or (df_output is None)
         ):
             raise ValueError(
-                "Please, provide lists corresponding to 'scenario_variables_columns'', 'random_variables_columns', 'output_variable_column' and 'list_bounds_scenario_variables'."
+                "Please, provide lists corresponding to 'df_scenario'', 'df_aleatory' and 'df_output'."
             )
         else:
-            self.scenario_variables_columns = scenario_variables_columns
-            self.random_variables_columns = random_variables_columns
-            self.output_variable_column = output_variable_column
+            self._df_scenario = df_scenario
+            self._df_aleatory = df_aleatory
 
-        if dataset is not None:
-            self.dataset = dataset
-            self.scenario_variables_sample = ot.Sample(
-                self.dataset[self.scenario_variables_columns].values
-            )
-            self.random_variables_sample = ot.Sample(
-                self.dataset[self.random_variables_columns].values
-            )
-            self.input_sample = ot.Sample(
-                self.dataset[
-                    self.scenario_variables_columns + self.random_variables_columns
-                ].values
-            )
-            self.output_sample = ot.Sample(
-                self.dataset[self.output_variable_column].values
-            )
-            self.dim_scenario = len(self.scenario_variables_columns)
-            self.dim_random = len(self.random_variables_columns)
-            self.dim_input = self.dim_random + self.dim_scenario
-        else:
-            raise ValueError("Please, provide a dataset.")
+            self._df_input = pd.concat([self._df_scenario, self._df_aleatory], axis=1)
+            self._df_output = df_output
 
-        self.output_quantile_order = output_quantile_order
-        self.empirical_quantile = self.output_sample.computeQuantile(
-            self.output_quantile_order
+            self._sample_scenario = ot.Sample(
+                self._df_scenario.values
+            )
+            self._sample_aleatory = ot.Sample(
+                self._df_aleatory.values
+            )
+            self._sample_output = ot.Sample(
+                self._df_output.values
+            )
+            self._sample_input = ot.Sample(
+                pd.concat([self._sample_scenario, self._sample_aleatory], axis=1)
+            )
+            self._dim_scenario = self._sample_scenario.getDimension()
+            self._dim_random = self._sample_aleatory.getDimension()
+            self._dim_input = self._sample_input.getDimension()
+
+        self._output_quantile_order = output_quantile_order
+        self._empirical_quantile = self._sample_output.computeQuantile(
+            self._output_quantile_order
         )[0]
-        self.p_value_threshold = p_value_threshold
-        self.n_perm = n_perm
-        self.figpath = figpath
+        self._p_value_threshold = p_value_threshold
+        self._n_perm = n_perm
 
         if covariance_collection is None:
-            self.input_covariance_collection = []
-            for i in range(self.dim_input):
+            input_covariance_collection = []
+            for i in range(self._dim_input):
                 Xi = self.input_sample.getMarginal(i)
                 input_covariance = ot.SquaredExponential(1)
                 input_covariance.setScale(Xi.computeStandardDeviation())
-                self.input_covariance_collection.append(input_covariance)
-
-            self.output_covariance = ot.SquaredExponential(1)
-            self.output_covariance.setScale(
-                self.output_sample.computeStandardDeviation()
+                input_covariance_collection.append(input_covariance)
+            output_covariance = ot.SquaredExponential(1)
+            output_covariance.setScale(
+                self._sample_output.computeStandardDeviation()
             )
+            self._covariance_collection = input_covariance_collection + [output_covariance]
+        else:
+            self._covariance_collection = covariance_collection            
 
-        self.covariance_collection = self.input_covariance_collection + [
-            self.output_covariance
-        ]
+        self._GSA_study = None
+        self._TSA_study = None
+        self._CSA_study = None
 
-        self.GSA_study = None
-        self.TSA_study = None
-        self.CSA_study = None
-        self.GSA_results = pd.DataFrame(
-            [],
-            columns=self.scenario_variables_columns + self.random_variables_columns,
-            index=[],
-        )
-        self.TSA_results = pd.DataFrame(
-            [],
-            columns=self.scenario_variables_columns + self.random_variables_columns,
-            index=[],
-        )
-        self.CSA_results = pd.DataFrame(
-            [],
-            columns=self.scenario_variables_columns + self.random_variables_columns,
-            index=[],
-        )
-        self.Aggregated_pval_results = pd.DataFrame(
-            [],
-            columns=self.scenario_variables_columns + self.random_variables_columns,
-            index=[],
-        )
-        self.X_Primary_Influential_Inputs = None
-        self.X_Secondary_Influential_Inputs = None
-        self.X_Secondary_Influential_Inputs_after_aggregation = None
-        self.X_Epsilon = None
-        self.X_Penalized = None
-        self.X_Explanatory = None
-        self.X_Tilda = None
-        self.x_data = None
-        self.y_data = None
-        self.scaled_x_data = None
-        self.input_kriging_sample = None
-        self.output_kriging_sample = None
-        self.kriging_result = None
-        self.kriging_metamodel = None
-        self.validation_results = None
-        self.X_Penalized_data = None
-        self.X_Penalized_sample = None
+        df_columns = self._df_scenario.columns.tolist() + self._df_aleatory.columns.tolist()
+
+        self._GSA_results = pd.DataFrame([],columns=df_columns,index=[],)
+        self._TSA_results = pd.DataFrame([],columns=df_columns,index=[],)
+        self._CSA_results = pd.DataFrame([],columns=df_columns,index=[],)
+        self._Aggregated_pval_results = pd.DataFrame([],columns=df_columns,index=[],)
+
+        self._X_Primary_Influential_Inputs = None
+        self._X_Secondary_Influential_Inputs = None
+        self._X_Secondary_Influential_Inputs_after_aggregation = None
+        self._X_Epsilon = None
+        self._X_Penalized = None
+        self._X_Explanatory = None
+        self._X_Tilda = None
+        self._x_data = None
+        self._y_data = None
+        self._scaled_x_data = None
+        self._input_kriging_sample = None
+        self._output_kriging_sample = None
+        self._kriging_result = None
+        self._kriging_metamodel = None
+        self._validation_results = None
+        self._X_Penalized_data = None
+        self._X_Penalized_sample = None
         # self.Conditional_Probabilities_Results = pd.DataFrame([], columns = self.X_Penalized, index=[])
-        self.list_probabilities_x_pen = None
+        self._list_probabilities_x_pen = None
 
     def draw_output_sample_analysis(self):
-        graph_output = ot.HistogramFactory().build(self.output_sample).drawPDF()
+        hist = ot.HistogramFactory().build(self._sample_output)
+        graph_output = hist.drawPDF()
+        #
         kde = ot.KernelSmoothing()
-        fit = kde.build(self.output_sample)
+        fit = kde.build(self._sample_output)
         kde_curve = fit.drawPDF()
         graph_output.add(kde_curve)
-        graph_output.setColors(["dodgerblue3", "darkorange1"])
-        graph_output.setLegends(["Histogram", "KDE"])
+        #
+        mean_Y = self._sample_output.computeMean()[0]
+        mean_line = ot.Curve([[mean_Y], [mean_Y]], [[0.0], [fit.computePDF([mean_Y])]])
+        mean_line.setLineWidth(2.0)
+        graph_output.add(mean_line)
+        #
+        median_Y = self._sample_output.computeMedian()[0]
+        median_line = ot.Curve([[median_Y], [median_Y]], [[0.0], [fit.computePDF([median_Y])]])
+        median_line.setLineWidth(2.0)
+        graph_output.add(median_line)
+        #
+        quantile_line = ot.Curve([[self._empirical_quantile], [self._empirical_quantile]], [[0.0], [fit.computePDF([self._empirical_quantile])]])
+        quantile_line.setLineWidth(2.0)
+        graph_output.add(quantile_line)
+        #
+        #graph_output.setColors(["dodgerblue3", "darkorange1"])
+        graph_output.setLegends(["Histogram", "KDE", "Mean", "Median", "Empirical quantile"])
         graph_output.setLegendPosition("topright")
-        graph_output.setTitle("")
-        view_output = otv.View(graph_output)
-        view_output.save(
-            self.figpath + "output_sample_analysis.png", dpi=150, bbox_inches="tight"
-        )
-        view_output.save(
-            self.figpath + "output_sample_analysis.pdf", dpi=150, bbox_inches="tight"
-        )
-        print(
-            ">> Empirical quantile estimated from the output sample =",
-            "{:.6}".format(self.empirical_quantile),
-        )
+        graph_output.setTitle("Empirical quantile =", "{:.6}".format(self._empirical_quantile))
+        graph_output.setXTitle("Y")
+        graph_output.setYTitle("")
+        
+        return graph_output
 
     def set_permutation_size(self, n_perm):
-        self.n_perm = n_perm
+        self._n_perm = n_perm
 
-    def perform_GSA_study(self, hsic_estimator_type=ot.HSICVStat(), savefile=None):
-        self.GSA_study = ot.HSICEstimatorGlobalSensitivity(
-            self.covariance_collection,
-            self.input_sample,
-            self.output_sample,
+    def perform_GSA_study(self, hsic_estimator_type=ot.HSICUStat(), savefile=None):
+        self._GSA_study = ot.HSICEstimatorGlobalSensitivity(
+            self._covariance_collection,
+            self._sample_input,
+            self._sample_output,
             hsic_estimator_type,
         )
-        self.GSA_study.setPermutationSize(self.n_perm)
+        self._GSA_study.setPermutationSize(self._n_perm)
 
-        self.GSA_results.loc["HSIC", :] = self.GSA_study.getHSICIndices()
-        self.GSA_results.loc["R2-HSIC", :] = self.GSA_study.getR2HSICIndices()
-        self.GSA_results.loc[
+        self._GSA_results.loc["HSIC", :] = self._GSA_study.getHSICIndices()
+        self._GSA_results.loc["R2-HSIC", :] = self._GSA_study.getR2HSICIndices()
+        self._GSA_results.loc[
             "p-values perm", :
-        ] = self.GSA_study.getPValuesPermutation()
-        self.GSA_results.loc[
+        ] = self._GSA_study.getPValuesPermutation()
+        self._GSA_results.loc[
             "p-values asymp", :
-        ] = self.GSA_study.getPValuesAsymptotic()
+        ] = self._GSA_study.getPValuesAsymptotic()
 
         if savefile is not None:
-            self.GSA_results.to_csv(savefile, index=True)
-        return self.GSA_results
+            self._GSA_results.to_csv(savefile, index=True)
+        return self._GSA_results
 
-    def perform_TSA_study(self, hsic_estimator_type=ot.HSICVStat(), savefile=None):
-        critical_domain = ot.Interval(self.empirical_quantile, float("inf"))
+    def perform_TSA_study(self, hsic_estimator_type=ot.HSICUStat(), savefile=None):
+        critical_domain = ot.Interval(self._empirical_quantile, float("inf"))
         dist_to_critical_domain = ot.DistanceToDomainFunction(critical_domain)
-        smoothing_parameter = 0.1 * self.output_sample.computeStandardDeviation()[0]
+        smoothing_parameter = 0.1 * self._sample_output.computeStandardDeviation()[0]
         f = ot.SymbolicFunction(["x", "s"], ["exp(-x/s)"])
         phi = ot.ParametricFunction(f, [1], [smoothing_parameter])
         filter_function = ot.ComposedFunction(phi, dist_to_critical_domain)
 
-        self.TSA_study = ot.HSICEstimatorTargetSensitivity(
+        self._TSA_study = ot.HSICEstimatorTargetSensitivity(
             self.covariance_collection,
             self.input_sample,
-            self.output_sample,
+            self._sample_output,
             hsic_estimator_type,
             filter_function,
         )
-        self.TSA_study.setPermutationSize(self.n_perm)
+        self._TSA_study.setPermutationSize(self._n_perm)
 
-        self.TSA_results.loc["T-HSIC", :] = self.TSA_study.getHSICIndices()
-        self.TSA_results.loc["T-R2-HSIC", :] = self.TSA_study.getR2HSICIndices()
-        self.TSA_results.loc[
+        self._TSA_results.loc["T-HSIC", :] = self._TSA_study.getHSICIndices()
+        self._TSA_results.loc["T-R2-HSIC", :] = self._TSA_study.getR2HSICIndices()
+        self._TSA_results.loc[
             "p-values perm", :
-        ] = self.TSA_study.getPValuesPermutation()
-        self.TSA_results.loc[
+        ] = self._TSA_study.getPValuesPermutation()
+        self._TSA_results.loc[
             "p-values asymp", :
-        ] = self.TSA_study.getPValuesAsymptotic()
+        ] = self._TSA_study.getPValuesAsymptotic()
 
         if savefile is not None:
-            self.TSA_results.to_csv(savefile, index=True)
-        return self.TSA_results
+            self._TSA_results.to_csv(savefile, index=True)
+        return self._TSA_results
 
     def perform_CSA_study(self, savefile=None):
-        critical_domain = ot.Interval(self.empirical_quantile, float("inf"))
+        critical_domain = ot.Interval(self._empirical_quantile, float("inf"))
         dist_to_critical_domain = ot.DistanceToDomainFunction(critical_domain)
-        smoothing_parameter = 0.1 * self.output_sample.computeStandardDeviation()[0]
+        smoothing_parameter = 0.1 * self._sample_output.computeStandardDeviation()[0]
         f = ot.SymbolicFunction(["x", "s"], ["exp(-x/s)"])
         phi = ot.ParametricFunction(f, [1], [smoothing_parameter])
         filter_function = ot.ComposedFunction(phi, dist_to_critical_domain)
 
-        self.CSA_study = ot.HSICEstimatorConditionalSensitivity(
+        self._CSA_study = ot.HSICEstimatorConditionalSensitivity(
             self.covariance_collection,
             self.input_sample,
-            self.output_sample,
+            self._sample_output,
             filter_function,
         )
-        self.CSA_study.setPermutationSize(self.n_perm)
+        self._CSA_study.setPermutationSize(self._n_perm)
 
-        self.CSA_results.loc["C-HSIC", :] = self.CSA_study.getHSICIndices()
-        self.CSA_results.loc["C-R2-HSIC", :] = self.CSA_study.getR2HSICIndices()
-        self.CSA_results.loc[
+        self._CSA_results.loc["C-HSIC", :] = self._CSA_study.getHSICIndices()
+        self._CSA_results.loc["C-R2-HSIC", :] = self._CSA_study.getR2HSICIndices()
+        self._CSA_results.loc[
             "p-values perm", :
-        ] = self.CSA_study.getPValuesPermutation()
+        ] = self._CSA_study.getPValuesPermutation()
 
         if savefile is not None:
-            self.CSA_results.to_csv(savefile, index=True)
-        return self.CSA_results
+            self._CSA_results.to_csv(savefile, index=True)
+        return self._CSA_results
 
     def draw_sensitivity_results(self):
-        if self.GSA_study is None:
+        if self._GSA_study is None:
             _ = self.perform_GSA_study()
-        if self.TSA_study is None:
+        if self._TSA_study is None:
             _ = self.perform_TSA_study()
-        if self.CSA_study is None:
+        if self._CSA_study is None:
             _ = self.perform_CSA_study()
 
-        graph_GSA_indices = self.GSA_study.drawR2HSICIndices()
+        graph_GSA_indices = self._GSA_study.drawR2HSICIndices()
         graph_GSA_indices.setColors(["darkorange1", "black"])
         graph_GSA_indices.setXTitle("inputs")
         graph_GSA_indices.setYTitle("values of indices")
         graph_GSA_indices.setTitle("GSA study - R2-HSIC indices")
-        view_GSA_indices = otv.View(graph_GSA_indices)
-        view_GSA_indices.save(
-            self.figpath + "GSA_R2HSIC_indices.png", dpi=150, bbox_inches="tight"
-        )
-        view_GSA_indices.save(
-            self.figpath + "GSA_R2HSIC_indices.pdf", dpi=150, bbox_inches="tight"
-        )
 
-        graph_GSA_pval_asymp = self.GSA_study.drawPValuesAsymptotic()
+        graph_GSA_pval_asymp = self._GSA_study.drawPValuesAsymptotic()
         g = ot.SymbolicFunction("x", "0.05")
-        threshold_pval = g.draw(0, self.dim_input)
+        threshold_pval = g.draw(0, self._dim_input)
         graph_GSA_pval_asymp.add(threshold_pval)
         graph_GSA_pval_asymp.setColors(["dodgerblue3", "black", "red"])
         graph_GSA_pval_asymp.setXTitle("inputs")
         graph_GSA_pval_asymp.setYTitle("p-values")
         graph_GSA_pval_asymp.setTitle("GSA study - Asymptotic p-values")
-        view_GSA_pval_asymp = otv.View(graph_GSA_pval_asymp)
-        view_GSA_pval_asymp.save(
-            self.figpath + "GSA_pval_asymp.png", dpi=150, bbox_inches="tight"
-        )
-        view_GSA_pval_asymp.save(
-            self.figpath + "GSA_pval_asymp.pdf", dpi=150, bbox_inches="tight"
-        )
 
-        graph_GSA_pval_perm = self.GSA_study.drawPValuesPermutation()
+        graph_GSA_pval_perm = self._GSA_study.drawPValuesPermutation()
         g = ot.SymbolicFunction("x", "0.05")
-        threshold_pval = g.draw(0, self.dim_input)
+        threshold_pval = g.draw(0, self._dim_input)
         graph_GSA_pval_perm.add(threshold_pval)
         graph_GSA_pval_perm.setColors(["grey", "black", "red"])
         graph_GSA_pval_perm.setXTitle("inputs")
         graph_GSA_pval_perm.setYTitle("p-values")
         graph_GSA_pval_perm.setTitle(
-            "GSA study - Permutation p-values ($n_{perm}$ = %d)" % self.n_perm
-        )
-        view_GSA_pval_perm = otv.View(graph_GSA_pval_perm)
-        view_GSA_pval_perm.save(
-            self.figpath + "GSA_pval_perm.png", dpi=150, bbox_inches="tight"
-        )
-        view_GSA_pval_perm.save(
-            self.figpath + "GSA_pval_perm.pdf", dpi=150, bbox_inches="tight"
+            "GSA study - Permutation p-values ($n_{perm}$ = %d)" % self._n_perm
         )
 
-        graph_TSA_indices = self.TSA_study.drawR2HSICIndices()
+        graph_TSA_indices = self._TSA_study.drawR2HSICIndices()
         graph_TSA_indices.setColors(["darkorange1", "black"])
         graph_TSA_indices.setXTitle("inputs")
         graph_TSA_indices.setYTitle("values of indices")
         graph_TSA_indices.setTitle("TSA study - R2-HSIC indices")
-        view_TSA_indices = otv.View(graph_TSA_indices)
-        view_TSA_indices.save(
-            self.figpath + "TSA_R2HSIC_indices.png", dpi=150, bbox_inches="tight"
-        )
-        view_TSA_indices.save(
-            self.figpath + "TSA_R2HSIC_indices.pdf", dpi=150, bbox_inches="tight"
-        )
 
-        graph_TSA_pval_asymp = self.TSA_study.drawPValuesAsymptotic()
+        graph_TSA_pval_asymp = self._TSA_study.drawPValuesAsymptotic()
         g = ot.SymbolicFunction("x", "0.05")
-        threshold_pval = g.draw(0, self.dim_input)
+        threshold_pval = g.draw(0, self._dim_input)
         graph_TSA_pval_asymp.add(threshold_pval)
         graph_TSA_pval_asymp.setColors(["dodgerblue3", "black", "red"])
         graph_TSA_pval_asymp.setXTitle("inputs")
         graph_TSA_pval_asymp.setYTitle("p-values")
         graph_TSA_pval_asymp.setTitle("TSA study - Asymptotic p-values")
-        view_TSA_pval_asymp = otv.View(graph_TSA_pval_asymp)
-        view_TSA_pval_asymp.save(
-            self.figpath + "TSA_pval_asymp.png", dpi=150, bbox_inches="tight"
-        )
-        view_TSA_pval_asymp.save(
-            self.figpath + "TSA_pval_asymp.pdf", dpi=150, bbox_inches="tight"
-        )
 
-        graph_TSA_pval_perm = self.TSA_study.drawPValuesPermutation()
+        graph_TSA_pval_perm = self._TSA_study.drawPValuesPermutation()
         g = ot.SymbolicFunction("x", "0.05")
-        threshold_pval = g.draw(0, self.dim_input)
+        threshold_pval = g.draw(0, self._dim_input)
         graph_TSA_pval_perm.add(threshold_pval)
         graph_TSA_pval_perm.setColors(["grey", "black", "red"])
         graph_TSA_pval_perm.setXTitle("inputs")
         graph_TSA_pval_perm.setYTitle("p-values")
         graph_TSA_pval_perm.setTitle(
-            "TSA study - Permutation p-values ($n_{perm}$ = %d)" % self.n_perm
-        )
-        view_TSA_pval_perm = otv.View(graph_TSA_pval_perm)
-        view_TSA_pval_perm.save(
-            self.figpath + "TSA_pval_perm.png", dpi=150, bbox_inches="tight"
-        )
-        view_TSA_pval_perm.save(
-            self.figpath + "TSA_pval_perm.pdf", dpi=150, bbox_inches="tight"
+            "TSA study - Permutation p-values ($n_{perm}$ = %d)" % self._n_perm
         )
 
-        graph_CSA_indices = self.CSA_study.drawR2HSICIndices()
+        graph_CSA_indices = self._CSA_study.drawR2HSICIndices()
         graph_CSA_indices.setColors(["darkorange1", "black"])
         graph_CSA_indices.setXTitle("inputs")
         graph_CSA_indices.setYTitle("values of indices")
         graph_CSA_indices.setTitle("CSA study - R2-HSIC indices")
-        view_CSA_indices = otv.View(graph_CSA_indices)
-        view_CSA_indices.save(
-            self.figpath + "CSA_R2HSIC_indices.png", dpi=150, bbox_inches="tight"
-        )
-        view_CSA_indices.save(
-            self.figpath + "CSA_R2HSIC_indices.pdf", dpi=150, bbox_inches="tight"
-        )
 
-        graph_CSA_pval_perm = self.CSA_study.drawPValuesPermutation()
+
+        graph_CSA_pval_perm = self._CSA_study.drawPValuesPermutation()
         g = ot.SymbolicFunction("x", "0.05")
-        threshold_pval = g.draw(0, self.dim_input)
+        threshold_pval = g.draw(0, self._dim_input)
         graph_CSA_pval_perm.add(threshold_pval)
         graph_CSA_pval_perm.setColors(["grey", "black", "red"])
         graph_CSA_pval_perm.setXTitle("inputs")
         graph_CSA_pval_perm.setYTitle("p-values")
         graph_CSA_pval_perm.setTitle(
-            "CSA study - Permutation p-values ($n_{perm}$ = %d)" % self.n_perm
-        )
-        view_CSA_pval_perm = otv.View(graph_CSA_pval_perm)
-        view_CSA_pval_perm.save(
-            self.figpath + "CSA_pval_perm.png", dpi=150, bbox_inches="tight"
-        )
-        view_CSA_pval_perm.save(
-            self.figpath + "CSA_pval_perm.pdf", dpi=150, bbox_inches="tight"
+            "CSA study - Permutation p-values ($n_{perm}$ = %d)" % self._n_perm
         )
 
-    def aggregate_pvalues_and_sort_variables(self, sortby_method="Bonferroni"):
-        if self.GSA_study is None:
+        graph_dict = {"GSA indices" :    graph_GSA_indices,
+                      "GSA pval asymp" : graph_GSA_pval_asymp,
+                      "GSA pval perm" :  graph_GSA_pval_perm,
+                      "TSA indices" :    graph_TSA_indices,
+                      "TSA pval asymp" : graph_TSA_pval_asymp,
+                      "TSA pval perm" :  graph_TSA_pval_perm,
+                      "CSA indices" :    graph_CSA_indices,
+                      "CSA pval perm" :  graph_CSA_pval_perm,
+                      }
+        
+        return graph_dict
+
+    def aggregate_pvalues_and_sort_variables(self, isAsymptotic=False,
+                                             sortby_method="Bonferroni"):
+        if self._GSA_study is None:
             _ = self.perform_GSA_study()
-        if self.TSA_study is None:
+        if self._TSA_study is None:
             _ = self.perform_TSA_study()
-        if self.CSA_study is None:
+        if self._CSA_study is None:
             _ = self.perform_CSA_study()
 
-        sortby_method = sortby_method + " p-values"
+        sortby_method += " p-values"
 
-        if len(self.input_sample) < 1000 and (self.n_perm > 200):
+        if isAsymptotic:
+            print(">> Info: Asymptotic regime => asymptotic p-values will be used!")
+            self._Aggregated_pval_results.loc["GSA p-values", :] = self._GSA_results.loc[
+                "p-values asymp", :
+            ]
+            self._Aggregated_pval_results.loc["TSA p-values", :] = self._TSA_results.loc[
+                "p-values asymp", :
+            ]
+        else:
             print(
-                ">> Info: Non-asymptotic regime: permutation-based p-values will be used!"
+                ">> Info: Non-asymptotic regime => permutation-based p-values will be used!"
             )
-            self.Aggregated_pval_results.loc["GSA p-values", :] = self.GSA_results.loc[
+            self._Aggregated_pval_results.loc["GSA p-values", :] = self._GSA_results.loc[
                 "p-values perm", :
             ]
-            self.Aggregated_pval_results.loc["TSA p-values", :] = self.TSA_results.loc[
+            self._Aggregated_pval_results.loc["TSA p-values", :] = self._TSA_results.loc[
                 "p-values perm", :
             ]
             # TODO : inclure  les p-valeurs CSA dans la stratégie globale
-            self.Aggregated_pval_results.loc["CSA p-values", :] = self.CSA_results.loc[
+            self._Aggregated_pval_results.loc["CSA p-values", :] = self._CSA_results.loc[
                 "p-values perm", :
             ]
-        else:
-            print(">> Info: Asymptotic regime: asymptotic p-values will be used!")
-            self.Aggregated_pval_results.loc["GSA p-values", :] = self.GSA_results.loc[
-                "p-values asymp", :
-            ]
-            self.Aggregated_pval_results.loc["TSA p-values", :] = self.TSA_results.loc[
-                "p-values asymp", :
-            ]
+
+        pval_GSA = self._Aggregated_pval_results.loc["GSA p-values", :].values
+        pval_TSA = self._Aggregated_pval_results.loc["TSA p-values", :].values
 
         # Aggregate GSA and TSA results using Bonferroni correction
         # ---------------------------
-        pval_GSA = self.Aggregated_pval_results.loc["GSA p-values", :].values
-        pval_TSA = self.Aggregated_pval_results.loc["TSA p-values", :].values
-        self.Aggregated_pval_results.loc["Bonferroni p-values", :] = np.minimum(
+        self._Aggregated_pval_results.loc["Bonferroni p-values", :] = np.minimum(
             2 * np.minimum(pval_GSA, pval_TSA), 1
         )
 
         # Other advanced statistics used for aggregation
         # ---------------------------
-        self.Aggregated_pval_results.loc["Fisher p-values", :] = -np.log(
+        self._Aggregated_pval_results.loc["Fisher p-values", :] = -np.log(
             pval_GSA.astype("float64")
         ) - np.log(pval_TSA.astype("float64"))
-        self.Aggregated_pval_results.loc["Tippet p-values", :] = 1 - np.minimum(
-            pval_GSA, pval_TSA
-        )
-        self.Aggregated_pval_results.loc["InvGamma p-values", :] = 1 - np.minimum(
+        self._Aggregated_pval_results.loc["Tippet p-values", :] = 1 - np.minimum(
             pval_GSA, pval_TSA
         )
 
-        for colname, i in zip(self.dataset.columns, range(self.dim_input)):
+        for i, colname in enumerate(self._df_input.columns):
             invgamma_dist_GSA = ot.InverseGamma(1 / pval_GSA[i], 1.0)
             invgamma_dist_TSA = ot.InverseGamma(1 / pval_TSA[i], 1.0)
-            self.Aggregated_pval_results.loc[
+            self._Aggregated_pval_results.loc[
                 "InvGamma p-values", colname
             ] = invgamma_dist_GSA.computeCDF(
                 1 - pval_GSA[i]
@@ -480,82 +425,83 @@ class Icscream:
 
         # Variable ranking based on the level of the test (first-kind error)
         # ---------------------------
-        aggregated_pval = self.Aggregated_pval_results.loc[sortby_method, :]
-        self.X_Primary_Influential_Inputs = aggregated_pval[
-            aggregated_pval <= self.p_value_threshold
+        aggregated_pval = self._Aggregated_pval_results.loc[sortby_method, :]
+        self._X_Primary_Influential_Inputs = aggregated_pval[
+            aggregated_pval <= self._p_value_threshold
         ].index.tolist()
-        self.X_Secondary_Influential_Inputs = aggregated_pval[
-            (aggregated_pval > self.p_value_threshold)
-            & (aggregated_pval <= 2 * self.p_value_threshold)
+        self._X_Secondary_Influential_Inputs = aggregated_pval[
+            (aggregated_pval > self._p_value_threshold)
+            & (aggregated_pval <= 2 * self._p_value_threshold)
         ].index.tolist()
-        self.X_Epsilon = aggregated_pval[
-            aggregated_pval > 2 * self.p_value_threshold
+        self._X_Epsilon = aggregated_pval[
+            aggregated_pval > 2 * self._p_value_threshold
         ].index.tolist()
 
-        print(">> X_Primary_Influential_Inputs =", self.X_Primary_Influential_Inputs)
-        print(
-            ">> X_Secondary_Influential_Inputs =", self.X_Secondary_Influential_Inputs
-        )
-        print(">> X_Epsilon =", self.X_Epsilon)
+        inputs_dict = {"X_Primary_Influential_Inputs" : self._X_Primary_Influential_Inputs,
+                       "X_Secondary_Influential_Inputs" : self._X_Secondary_Influential_Inputs,
+                       "X_Epsilon" : self._X_Epsilon,
+                       }
+
+        return inputs_dict
 
     def build_and_validate_kriging_metamodel(
         self, nugget_factor=1e-6, optimization_algo="LN_COBYLA", nsample_multistart=10
     ):
-        self.X_Penalized = self.scenario_variables_columns
-        print(">> X_Penalized =", self.X_Penalized)
+        self._X_Penalized = self.scenario_variables_columns
+        print(">> X_Penalized =", self._X_Penalized)
 
         # Explanatory variables
         # ---------------------------
         # Trick: use pd.unique() instead of np.unique() to avoid sorting indices
-        self.X_Explanatory = pd.unique(
+        self._X_Explanatory = pd.unique(
             np.concatenate(
-                (self.X_Primary_Influential_Inputs, self.X_Penalized), axis=None
+                (self._X_Primary_Influential_Inputs, self._X_Penalized), axis=None
             ).tolist()
         ).tolist()
         # Check whether there is any duplicate between X_Explanatory and X_Secondary_Influential_Inputs
-        self.X_Secondary_Influential_Inputs_after_aggregation = [
+        self._X_Secondary_Influential_Inputs_after_aggregation = [
             elem
-            for elem in self.X_Secondary_Influential_Inputs
-            if elem not in self.X_Explanatory
+            for elem in self._X_Secondary_Influential_Inputs
+            if elem not in self._X_Explanatory
         ]
-        self.X_Tilda = [
+        self._X_Tilda = [
             x
-            for x in self.X_Explanatory
-            + self.X_Secondary_Influential_Inputs_after_aggregation
-            if x not in self.X_Penalized
+            for x in self._X_Explanatory
+            + self._X_Secondary_Influential_Inputs_after_aggregation
+            if x not in self._X_Penalized
         ]
 
-        print(">> X_Explanatory =", self.X_Explanatory)
+        print(">> X_Explanatory =", self._X_Explanatory)
         print(
             ">> X_Secondary_Influential_Inputs after aggregation =",
-            self.X_Secondary_Influential_Inputs_after_aggregation,
+            self._X_Secondary_Influential_Inputs_after_aggregation,
         )
         print(
-            ">> X_Tilda =", self.X_Tilda
+            ">> X_Tilda =", self._X_Tilda
         )  # Useful for conditional probability computation
 
-        if len(self.X_Explanatory) > 30:
+        if len(self._X_Explanatory) > 30:
             raise ValueError("The sequential strategy should be implemented!")
         else:
             print(">> Info: Direct metamodel building strategy will be used!")
 
         # Loading data
         # ---------------------------
-        self.x_data = self.dataset[
-            self.X_Explanatory + self.X_Secondary_Influential_Inputs_after_aggregation
+        self._x_data = self.dataset[
+            self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation
         ]
-        self.y_data = self.dataset[self.output_variable_column]
-        dim_krig = len(self.X_Explanatory) + len(
-            self.X_Secondary_Influential_Inputs_after_aggregation
+        self._y_data = self.dataset[self.output_variable_column]
+        dim_krig = len(self._X_Explanatory) + len(
+            self._X_Secondary_Influential_Inputs_after_aggregation
         )
         print(">> dim_krig =", dim_krig)
 
         # Scaling data
         # ---------------------------
-        self.scaled_x_data = (self.x_data - self.x_data.mean(axis=0)) / self.x_data.std(
+        self._scaled_x_data = (self._x_data - self._x_data.mean(axis=0)) / self._x_data.std(
             axis=0
         )
-        scaled_x_data_sample = ot.Sample.BuildFromDataFrame(self.scaled_x_data)
+        scaled_x_data_sample = ot.Sample.BuildFromDataFrame(self._scaled_x_data)
 
         # Trend
         # ---------------------------
@@ -608,7 +554,7 @@ class Icscream:
         # Perform Kernel Herding using otkerneldesign for selecting both train and test designs
         # ---------------------------
         test_ratio = 0.2
-        test_size = int(self.scaled_x_data.shape[0] * test_ratio)
+        test_size = int(self._scaled_x_data.shape[0] * test_ratio)
         kernel_herding = otkd.KernelHerding(
             kernel=cov_kriging_model, candidate_set=scaled_x_data_sample
         )
@@ -617,9 +563,9 @@ class Icscream:
         print(">> test_size =", test_size)
 
         x_test_kh = kernel_herding_design
-        y_test_kh = self.y_data.loc[kernel_herding_indices]
-        copy_scaled_x_data = self.scaled_x_data.copy()
-        copy_y_data = self.y_data.copy()
+        y_test_kh = self._y_data.loc[kernel_herding_indices]
+        copy_scaled_x_data = self._scaled_x_data.copy()
+        copy_y_data = self._y_data.copy()
         x_learn_kh = copy_scaled_x_data.drop(
             kernel_herding_indices, axis=0, inplace=False
         )
@@ -635,8 +581,8 @@ class Icscream:
         max_bounds = []
         weight_bound = 5.0
 
-        for colname in self.scaled_x_data.columns:
-            selected_column = self.scaled_x_data[colname]
+        for colname in self._scaled_x_data.columns:
+            selected_column = self._scaled_x_data[colname]
             pairwise_distances = pdist(
                 np.array(selected_column).reshape(-1, 1), metric="euclidean"
             )
@@ -650,11 +596,11 @@ class Icscream:
 
         # Set the kriging algorithm
         # ---------------------------
-        self.input_kriging_sample = ot.Sample.BuildFromDataFrame(x_learn_kh)
-        self.output_kriging_sample = ot.Sample.BuildFromDataFrame(y_learn_kh)
+        self._input_kriging_sample = ot.Sample.BuildFromDataFrame(x_learn_kh)
+        self._output_kriging_sample = ot.Sample.BuildFromDataFrame(y_learn_kh)
         kriging_algo = ot.KrigingAlgorithm(
-            self.input_kriging_sample,
-            self.output_kriging_sample,
+            self._input_kriging_sample,
+            self._output_kriging_sample,
             cov_kriging_model,
             kriging_trend_basis,
         )
@@ -697,11 +643,11 @@ class Icscream:
 
         # Get kriging results and kriging metamodel
         # ---------------------------
-        self.kriging_result = kriging_algo.getResult()
-        self.kriging_metamodel = self.kriging_result.getMetaModel()
+        self._kriging_result = kriging_algo.getResult()
+        self._kriging_metamodel = self._kriging_result.getMetaModel()
 
-        result_trend = self.kriging_result.getTrendCoefficients()
-        result_covariance_model = self.kriging_result.getCovarianceModel()
+        result_trend = self._kriging_result.getTrendCoefficients()
+        result_covariance_model = self._kriging_result.getCovarianceModel()
 
         covariance_length_scale = np.array(result_covariance_model.getScale())
         covariance_amplitude = np.array(result_covariance_model.getAmplitude())
@@ -713,18 +659,18 @@ class Icscream:
         # Validate the kriging metamodel using the 'ot.MetaModelValidation' class
         # ---------------------------
         y_test_kh_sample = ot.Sample.BuildFromDataFrame(y_test_kh)
-        self.validation_results = ot.MetaModelValidation(
-            x_test_kh, y_test_kh_sample, self.kriging_metamodel
+        self._validation_results = ot.MetaModelValidation(
+            x_test_kh, y_test_kh_sample, self._kriging_metamodel
         )
 
-        Q2_coefficient = self.validation_results.computePredictivityFactor()[0]
+        Q2_coefficient = self._validation_results.computePredictivityFactor()[0]
         print(">> Q2 =", "{:.6}".format(Q2_coefficient))
 
         kriging_residuals = np.array(
-            self.validation_results.getResidualSample()
+            self._validation_results.getResidualSample()
         ).flatten()
         kriging_conditional_variance = np.array(
-            self.kriging_result.getConditionalMarginalVariance(x_test_kh)
+            self._kriging_result.getConditionalMarginalVariance(x_test_kh)
         )
         Predictive_Variance_Adequacy = np.abs(
             np.log10(
@@ -761,10 +707,10 @@ class Icscream:
 
         # Histogram of residuals
         # --------------
-        residuals = self.validation_results.getResidualSample()
+        residuals = self._validation_results.getResidualSample()
         ot.HistogramFactory().build(residuals).drawPDF()
         graph_histogram_residuals = (
-            self.validation_results.getResidualDistribution().drawPDF()
+            self._validation_results.getResidualDistribution().drawPDF()
         )
         graph_histogram_residuals.setXTitle("Residuals")
         graph_histogram_residuals.setLegends("")
@@ -782,7 +728,7 @@ class Icscream:
 
         # Observed vs. predicted values
         # --------------
-        graph_observed_vs_predicted = self.validation_results.drawValidation()
+        graph_observed_vs_predicted = self._validation_results.drawValidation()
         graph_observed_vs_predicted.setTitle(
             "Obs. vs. Predict -- ($n_{valid}$ = %d)" % test_size
         )
@@ -800,7 +746,7 @@ class Icscream:
 
         # QQ-plot
         # --------------
-        y_predicted_on_test_sample = self.kriging_metamodel(x_test_kh)
+        y_predicted_on_test_sample = self._kriging_metamodel(x_test_kh)
         graph_QQ_plot = ot.VisualTest.DrawQQplot(
             y_test_kh_sample, y_predicted_on_test_sample
         )
@@ -821,18 +767,18 @@ class Icscream:
         # Sample X_Tilda according to its distribution
         # --------------
         sample_X_Tilda = composed_distribution_X_Tilda.getSample(n_sample_X_Tilda)
-        sample_X_Tilda.setDescription(self.X_Tilda)
+        sample_X_Tilda.setDescription(self._X_Tilda)
 
         # Discretize intervals of penalized inputs
         # --------------
-        self.X_Penalized_data = self.dataset[self.X_Penalized]
-        self.X_Penalized_sample = ot.Sample.BuildFromDataFrame(self.X_Penalized_data)
+        self._X_Penalized_data = self.dataset[self._X_Penalized]
+        self._X_Penalized_sample = ot.Sample.BuildFromDataFrame(self._X_Penalized_data)
 
         min_penalized = []
         max_penalized = []
 
-        for colname in self.X_Penalized_data.columns:
-            selected_column = self.X_Penalized_data[colname]
+        for colname in self._X_Penalized_data.columns:
+            selected_column = self._X_Penalized_data[colname]
             array_column = np.array(selected_column).reshape(-1, 1)
             min_penalized.append(np.min(array_column))
             max_penalized.append(np.max(array_column))
@@ -840,7 +786,7 @@ class Icscream:
         bounds_penalized = ot.Interval(min_penalized, max_penalized)
 
         dist_penalized = ot.DistributionCollection()
-        for k in range(len(self.X_Penalized)):
+        for k in range(len(self._X_Penalized)):
             dist_penalized.add(
                 ot.Uniform(
                     bounds_penalized.getLowerBound()[k],
@@ -853,7 +799,7 @@ class Icscream:
         new_sample_X_Penalized = bounded_distribution_penalized.getSample(
             n_sample_X_Tilda
         )
-        new_sample_X_Penalized.setDescription(self.X_Penalized)
+        new_sample_X_Penalized.setDescription(self._X_Penalized)
         # print("new_sample_X_Penalized =", new_sample_X_Penalized)
 
         array_X_Penalized = np.array(new_sample_X_Penalized)
@@ -861,9 +807,9 @@ class Icscream:
 
         # Compute conditional probabilities
         # --------------
-        self.list_probabilities_x_pen = []
+        self._list_probabilities_x_pen = []
 
-        for k in range(len(self.X_Penalized)):
+        for k in range(len(self._X_Penalized)):
             results_probabilities = {}
             print("k =", k)
             array_column = np.array(new_sample_X_Penalized[:, k]).reshape(-1, 1)
@@ -880,10 +826,10 @@ class Icscream:
                 x_joint = np.concatenate([x_pen_tot, np.array(sample_X_Tilda)], axis=1)
                 # print("x_joint =", x_joint)
 
-                mean_Gp = self.kriging_result.getConditionalMean(x_joint)
-                var_Gp = self.kriging_result.getConditionalMarginalVariance(x_joint)
+                mean_Gp = self._kriging_result.getConditionalMean(x_joint)
+                var_Gp = self._kriging_result.getConditionalMarginalVariance(x_joint)
                 ratio_integrand = (
-                    self.empirical_quantile - np.array(mean_Gp)
+                    self._empirical_quantile - np.array(mean_Gp)
                 ) / np.sqrt(np.array(var_Gp))
                 proba_x_pen = 1 - np.mean(ot.Normal().computeCDF(ratio_integrand))
 
@@ -892,13 +838,13 @@ class Icscream:
                 results_probabilities["proba_x_pen_" + str(j[0])] = [j[0], proba_x_pen]
                 # print("results_probabilities =", self.results_probabilities)
                 # list_probabilities.append(proba_x_pen)
-            self.list_probabilities_x_pen.append([k, results_probabilities])
+            self._list_probabilities_x_pen.append([k, results_probabilities])
 
         # Draw conditional probabilities
         # --------------
         plt.figure()
-        for k in range(len(self.X_Penalized)):
-            a = self.list_probabilities_x_pen[k][1].values()
+        for k in range(len(self._X_Penalized)):
+            a = self._list_probabilities_x_pen[k][1].values()
             values_array = np.array([i for i in a])
             b = values_array[values_array[:, 0].argsort()]
             x = b[:, 0]
