@@ -146,6 +146,15 @@ class Icscream:
         self._X_Tilda = None
         self._x_data = None
         self._y_data = None
+
+        self._kriging_trend_basis = None
+        self._cov_kriging_model = None
+
+        self._x_learn = None
+        self._y_learn = None
+        self._x_validation = None
+        self._y_validation = None
+
         self._scaled_x_data = None
         self._input_kriging_sample = None
         self._output_kriging_sample = None
@@ -200,7 +209,7 @@ class Icscream:
             hsic_estimator_type,
         )
         self._GSA_study.setPermutationSize(self._n_perm)
-
+        
         self._GSA_results.loc["HSIC", :] = self._GSA_study.getHSICIndices()
         self._GSA_results.loc["R2-HSIC", :] = self._GSA_study.getR2HSICIndices()
         self._GSA_results.loc[
@@ -412,7 +421,7 @@ class Icscream:
             pval_GSA, pval_TSA
         )
 
-        for i, colname in enumerate(self._df_input.columns):
+        for i, colname in enumerate(self._sample_input.getDescription()):
             invgamma_dist_GSA = ot.InverseGamma(1 / pval_GSA[i], 1.0)
             invgamma_dist_TSA = ot.InverseGamma(1 / pval_TSA[i], 1.0)
             self._Aggregated_pval_results.loc[
@@ -437,18 +446,18 @@ class Icscream:
             aggregated_pval > 2 * self._p_value_threshold
         ].index.tolist()
 
-        inputs_dict = {"X_Primary_Influential_Inputs" : self._X_Primary_Influential_Inputs,
-                       "X_Secondary_Influential_Inputs" : self._X_Secondary_Influential_Inputs,
-                       "X_Epsilon" : self._X_Epsilon,
-                       }
+        inputs_dict_sorted_variables = {"X_Primary_Influential_Inputs" : self._X_Primary_Influential_Inputs,
+                                        "X_Secondary_Influential_Inputs" : self._X_Secondary_Influential_Inputs,
+                                        "X_Epsilon" : self._X_Epsilon,
+                                        }
 
-        return inputs_dict
+        return inputs_dict_sorted_variables
+    
+    def build_explanatory_variables(self):
 
-    def build_and_validate_kriging_metamodel(
-        self, nugget_factor=1e-6, optimization_algo="LN_COBYLA", nsample_multistart=10
-    ):
-        self._X_Penalized = self.scenario_variables_columns
-        print(">> X_Penalized =", self._X_Penalized)
+        # Penalized variables
+        # ---------------------------
+        self._X_Penalized = self._df_scenario.columns.tolist()
 
         # Explanatory variables
         # ---------------------------
@@ -471,148 +480,133 @@ class Icscream:
             if x not in self._X_Penalized
         ]
 
-        print(">> X_Explanatory =", self._X_Explanatory)
-        print(
-            ">> X_Secondary_Influential_Inputs after aggregation =",
-            self._X_Secondary_Influential_Inputs_after_aggregation,
-        )
-        print(
-            ">> X_Tilda =", self._X_Tilda
-        )  # Useful for conditional probability computation
-
         if len(self._X_Explanatory) > 30:
             raise ValueError("The sequential strategy should be implemented!")
         else:
             print(">> Info: Direct metamodel building strategy will be used!")
+        
+        inputs_dict_variables_for_metamodeling = {"X_Penalized"   : self._X_Penalized,
+                                                  "X_Explanatory" : self._X_Explanatory,
+                                                  "X_Secondary_Influential_Inputs_after_aggregation" : self._X_Secondary_Influential_Inputs_after_aggregation,
+                                                  "X_Tilda" : self._X_Tilda,
+                                                  }
 
-        # Loading data
+        return inputs_dict_variables_for_metamodeling
+    
+
+    def setup_trend_and_covariance_models(self, trend_factory="ConstantBasisFactory",
+                                          marginal_cov_model=ot.MaternModel([1.0], [1.0], 5.0 / 2.0)):
+
+        # Managing input dimensions
         # ---------------------------
-        self._x_data = self.dataset[
-            self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation
-        ]
-        self._y_data = self.dataset[self.output_variable_column]
         dim_krig = len(self._X_Explanatory) + len(
             self._X_Secondary_Influential_Inputs_after_aggregation
         )
         print(">> dim_krig =", dim_krig)
 
-        # Scaling data
-        # ---------------------------
-        self._scaled_x_data = (self._x_data - self._x_data.mean(axis=0)) / self._x_data.std(
-            axis=0
-        )
-        scaled_x_data_sample = ot.Sample.BuildFromDataFrame(self._scaled_x_data)
-
         # Trend
         # ---------------------------
-        kriging_trend_basis = ot.ConstantBasisFactory(dim_krig).build()
-        # basis = ot.LinearBasisFactory(dim_krig).build()
-        # basis = ot.QuadraticBasisFactory(dim_krig).build()
-
-        # Covariance model for the explanatory inputs (X_EXP)
+        self._kriging_trend_basis = eval("ot." + trend_factory + "(dim_krig).build()")
+    
+        # Covariance model for the explanatory inputs
         # ---------------------------
-        marginal_cov_model = ot.MaternModel([1.0], [1.0], 5.0 / 2.0)
-        # ICSCREAM: X_Explanatory in a tensorized stationary anisotropic covariance
-        ## Modif VCN : on ajoute les X_Secondary_Influential_Inputs_after_aggregation dans le ProductCovarianceModel
-        # old cov_X_Explanatory = ot.ProductCovarianceModel([marginal_cov_model]*len(self.X_Explanatory))
-        cov_X_Explanatory = ot.ProductCovarianceModel([marginal_cov_model] * dim_krig)
+        cov_X_Explanatory = ot.ProductCovarianceModel([marginal_cov_model] * len(self._X_Explanatory))
 
-        cov_kriging_model = cov_X_Explanatory
-
-        ### Test commenté si jamais il faut distinguer X_EXP et X_SII (+ retirer ligne 395)
-        # if len(self.X_Secondary_Influential_Inputs_after_aggregation) == 0:
-        #     print(">> Info: X_Secondary_Influential_Inputs is empty and thus will not be considered in the covariance model")
-        #     cov_kriging_model = cov_X_Explanatory
-        # else:
-        #     print(">> Info: X_Secondary_Influential_Inputs is not empty and thus will be modeled through a stationary isotropic covariance model")
-        #     # ICSCREAM: X_Secondary_Influential_Inputs joint in a stationary isotropic covariance
-        #     # ----------------------------
-        #     # WARNING : si  ot.IsotropicCovarianceModel() utilisé, alors il faut
-        #     ## TODO : cov_X_Secondary_Influential_Inputs = ot.IsotropicCovarianceModel(marginal_cov_model, len(self.X_Secondary_Influential_Inputs_after_aggregation))
-        #     # Resulting covariance model
-        #     # cov_kriging_model = ot.ProductCovarianceModel([cov_X_Explanatory, cov_X_Secondary_Influential_Inputs])
-
-        # Set nugget factor
+        # Covariance model for the secondary influential inputs
         # ---------------------------
-        cov_kriging_model.setNuggetFactor(nugget_factor)
+        cov_X_Secondary_Influential_Inputs = ot.IsotropicCovarianceModel(marginal_cov_model, len(self._X_Secondary_Influential_Inputs_after_aggregation))
 
-        # [NOT USED FOR NOW] Covariance model for the remaining inputs (X_EPS)
+        # Resulting covariance model
         # ---------------------------
-        # ICSCREAM: X_EPS captured via an homoscedastic nugget effect
-        # Cannot use a DiracCovarianceModel here, see issue #1857
-        # https://github.com/openturns/openturns/issues/1857
-        # cov3 = ot.DiracCovarianceModel(n3)
-        ###########################
-        # [NOT USED FOR NOW] epsTol = 1e-8
-        # [NOT USED FOR NOW] cov_X_EPS = ot.AbsoluteExponential([epsTol]*nb_eps)
-        # [NOT USED FOR NOW] cov_X_EPS.setActiveParameter([nb_eps])
-        ###########################
-        # On active uniqt l'amplitude pour avoir la bonne valeur du nugget
-        # (de 0 à nb_eps-1, ce sont des valeurs de theta.
-        # A nb_eps, on active la valeur de l'amplitude)
+        self._cov_kriging_model = ot.ProductCovarianceModel([cov_X_Explanatory, cov_X_Secondary_Influential_Inputs])
 
-        # Perform Kernel Herding using otkerneldesign for selecting both train and test designs
+        # Activate nugget factor for optimization of the homoscedastic nugget effect
         # ---------------------------
-        test_ratio = 0.2
-        test_size = int(self._scaled_x_data.shape[0] * test_ratio)
-        kernel_herding = otkd.KernelHerding(
-            kernel=cov_kriging_model, candidate_set=scaled_x_data_sample
-        )
-        kernel_herding_design = kernel_herding.select_design(test_size)
-        kernel_herding_indices = kernel_herding.get_indices(kernel_herding_design)
-        print(">> test_size =", test_size)
-
-        x_test_kh = kernel_herding_design
-        y_test_kh = self._y_data.loc[kernel_herding_indices]
-        copy_scaled_x_data = self._scaled_x_data.copy()
-        copy_y_data = self._y_data.copy()
-        x_learn_kh = copy_scaled_x_data.drop(
-            kernel_herding_indices, axis=0, inplace=False
-        )
-        y_learn_kh = copy_y_data.drop(kernel_herding_indices, axis=0, inplace=False)
-        print(
-            ">> Check if 'y_test_kh' and 'y_learn_kh' are disjoint (0 if True) =",
-            np.sum(np.isin(y_test_kh, y_learn_kh)),
-        )
-
-        # Compute min and max bounds of the dataset
+        self._cov_kriging_model.activateNuggetFactor(True)
+    
+    
+    def build_kriging_data(self):
+        # Loading input and output data
         # ---------------------------
-        min_bounds = []
-        max_bounds = []
-        weight_bound = 5.0
+        self._x_data = self._sample_input.getMarginal([self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation])
+        self._y_data = self._sample_output
 
-        for colname in self._scaled_x_data.columns:
-            selected_column = self._scaled_x_data[colname]
-            pairwise_distances = pdist(
-                np.array(selected_column).reshape(-1, 1), metric="euclidean"
-            )
-            min_bounds.append(np.min(pairwise_distances) / weight_bound)
-            max_bounds.append(np.max(pairwise_distances) * weight_bound)
+        # Scaling input data
+        # ---------------------------
+        # This scaling step is mandatory due to the modeling of the X_SII through an isotropic covariance model which mixes several heterogenous variables (with possible various ranges of correlation lengths)
+        ## Warning: in Numpy, the np.std is biased while in Pandas, pd.std is unbiased by default.
+        ## COMMENT: it may be possible not to standardize the date. One should be careful with respect to the final optimization step.
+        # self._scaled_x_data = (self._x_data - self._x_data.mean(axis=0)) / self._x_data.std(
+        #     axis=0, ddof=1
+        # )
+        # scaled_x_data_sample = ot.Sample.BuildFromDataFrame(self._scaled_x_data)
 
-        optim_bounds = ot.Interval(min_bounds, max_bounds)
-        ### Probleme : le noyau IsotropicCovarianceModel n'a qu'un seul hyper-parametre
-        ## To do : ajouter une boucle sur les self.X_Secondary_Influential_Inputs_after_aggregation
-        # Idée : Set 10^-6 en valeur min et 50 en valeur max
+
+    def build_train_and_validation_sets_by_greedy_support_points(self, test_ratio=0.2):
+
+        # Perform Kernel Herding based on the Greedy Support Points algorithm using otkerneldesign for selecting both train and test designs
+        # ---------------------------
+        
+        # Perform KH on the whole dataset in order to arange it. Then, select the first 'n-validation_size' points to use them for training.
+        validation_size = int(self._x_data.getSize() * test_ratio)
+        greedy_sp = otkd.GreedySupportPoints(candidate_set=self._x_data) # Energy distance kernel
+        greedy_sp_design = greedy_sp.select_design(self._x_data.getSize())
+        greedy_sp_indices = greedy_sp.get_indices(greedy_sp_design)
+        print(">> validation_size =", validation_size)
+
+        # Build the learn and validation indices
+        learn_indices = greedy_sp_indices[0:-validation_size]
+        validation_indices = greedy_sp_indices[validation_size:]
+
+        # Build the learn and validation samples
+        self._x_learn = self._x_data[learn_indices]
+        self._y_learn = self._y_data[learn_indices]
+        self._x_validation = self._x_data[validation_indices]
+        self._y_validation = self._y_data[validation_indices]
+
+    def build_kriging_metamodel(
+        self, optimization_algo="LN_COBYLA", nsample_multistart=10
+    ):   
+
+        # # Compute min-max bounds of the dataset to help for the hyperparameters' optimization
+        # # ---------------------------
+        # ## Hypothesis: we suppose that the x_data have been already scaled prior to performing ICSCREAM
+        # min_bounds = []
+        # max_bounds = []
+        # weight_bound = 5.0
+
+        # for colname in self._X_Explanatory:
+        #     selected_column = self._x_learn.getMarginal([colname])
+        #     pairwise_distances = pdist(
+        #         np.array(selected_column).reshape(-1, 1), metric="euclidean"
+        #     )
+        #     min_bounds.append(np.min(pairwise_distances) / weight_bound)
+        #     max_bounds.append(np.max(pairwise_distances) * weight_bound)
+
+        # optim_bounds = ot.Interval(min_bounds, max_bounds)
+        # ### Probleme : le noyau IsotropicCovarianceModel n'a qu'un seul hyper-parametre
+        # ## To do : ajouter une boucle sur les self.X_Secondary_Influential_Inputs_after_aggregation
+        # # Idée : Set 10^-6 en valeur min et 50 en valeur max
 
         # Set the kriging algorithm
         # ---------------------------
-        self._input_kriging_sample = ot.Sample.BuildFromDataFrame(x_learn_kh)
-        self._output_kriging_sample = ot.Sample.BuildFromDataFrame(y_learn_kh)
         kriging_algo = ot.KrigingAlgorithm(
-            self._input_kriging_sample,
-            self._output_kriging_sample,
-            cov_kriging_model,
-            kriging_trend_basis,
+            self._x_learn,
+            self._y_learn,
+            self._cov_kriging_model,
+            self._kriging_trend_basis,
         )
 
         # Perform multistart
         # ---------------------------
+        ## Hypothesis: we suppose that the x_data have been already scaled prior to performing ICSCREAM
         dist_multi = ot.DistributionCollection()
-        for k in range(dim_krig):
+        for k in range(self._x_learn.getDimension()):
             dist_multi.add(
-                ot.Uniform(
-                    optim_bounds.getLowerBound()[k], optim_bounds.getUpperBound()[k]
-                )
+                ot.Uniform(0.0,1.0)
+                # ot.Uniform(
+                #     optim_bounds.getLowerBound()[k], optim_bounds.getUpperBound()[k]
+                # )
             )
 
         bounded_dist_multi = ot.ComposedDistribution(dist_multi)
@@ -623,7 +617,7 @@ class Icscream:
                 ot.LHSExperiment(bounded_dist_multi, nsample_multistart).generate(),
             )
         )
-        kriging_algo.setOptimizationBounds(optim_bounds)
+        # kriging_algo.setOptimizationBounds(optim_bounds) ## Hypothesis: data already scaled
 
         # Other algorithms:
         # LN_COBYLA | LD_LBFGS | LD_SLSQP
@@ -640,6 +634,10 @@ class Icscream:
             "{:.6}".format(elapsed),
             "(sec)",
         )
+
+    def validate_kriging_metamodel(
+        self, optimization_algo="LN_COBYLA", nsample_multistart=20
+    ):
 
         # Get kriging results and kriging metamodel
         # ---------------------------
