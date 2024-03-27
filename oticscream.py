@@ -160,6 +160,9 @@ class Icscream:
         self._output_kriging_sample = None
         self._kriging_result = None
         self._kriging_metamodel = None
+        self._kriging_algo = None
+
+
         self._validation_results = None
         self._X_Penalized_data = None
         self._X_Penalized_sample = None
@@ -564,7 +567,7 @@ class Icscream:
         self._x_validation = self._x_data[validation_indices]
         self._y_validation = self._y_data[validation_indices]
 
-    def build_kriging_metamodel(
+    def build_and_run_kriging_metamodel(
         self, optimization_algo="LN_COBYLA", nsample_multistart=10
     ):   
 
@@ -601,7 +604,10 @@ class Icscream:
         # ---------------------------
         ## Hypothesis: we suppose that the x_data have been already scaled prior to performing ICSCREAM
         dist_multi = ot.DistributionCollection()
-        for k in range(self._x_learn.getDimension()):
+        for k in range(self._cov_kriging_model.getParameter().getSize()-1):
+            # The "-1" term corresponds to the fact that the amplitude is analytically optimized"
+            # See: https://openturns.github.io/openturns/latest/user_manual/response_surface/_generated/openturns.GeneralLinearModelAlgorithm.html
+
             dist_multi.add(
                 ot.Uniform(0.0,1.0)
                 # ot.Uniform(
@@ -609,9 +615,9 @@ class Icscream:
                 # )
             )
 
-        bounded_dist_multi = ot.ComposedDistribution(dist_multi)
+        bounded_dist_multi = ot.JointDistribution(dist_multi)
 
-        kriging_algo.setOptimizationAlgorithm(
+        self._kriging_algo.setOptimizationAlgorithm(
             ot.MultiStart(
                 ot.NLopt(optimization_algo),
                 ot.LHSExperiment(bounded_dist_multi, nsample_multistart).generate(),
@@ -627,7 +633,7 @@ class Icscream:
         # Run the algorithm
         # ---------------------------
         t = tm.time()
-        kriging_algo.run()
+        self._kriging_algo.run()
         elapsed = tm.time() - t
         print(
             ">> Info: Elapsed time for metamodel training:",
@@ -635,49 +641,83 @@ class Icscream:
             "(sec)",
         )
 
-    def validate_kriging_metamodel(
-        self, optimization_algo="LN_COBYLA", nsample_multistart=20
-    ):
+        return self._kriging_algo
+
+    def validate_kriging_metamodel_using_hold_out_sample(self):
 
         # Get kriging results and kriging metamodel
         # ---------------------------
-        self._kriging_result = kriging_algo.getResult()
-        self._kriging_metamodel = self._kriging_result.getMetaModel()
+        kriging_result = self._kriging_algo.getResult()
+        kriging_metamodel = self._kriging_algo.getMetaModel()
 
-        result_trend = self._kriging_result.getTrendCoefficients()
-        result_covariance_model = self._kriging_result.getCovarianceModel()
+        result_trend = kriging_result.getTrendCoefficients()
+        result_covariance_model = kriging_result.getCovarianceModel()
 
-        covariance_length_scale = np.array(result_covariance_model.getScale())
-        covariance_amplitude = np.array(result_covariance_model.getAmplitude())
+        kriging_hyperparameters = {"trend"       : result_trend,
+                                   "lengthscale" : result_covariance_model.getScale(), #theta
+                                   "amplitude"   : result_covariance_model.getAmplitude(), #sigma_2
+                                   "nugget"      : result_covariance_model.getNuggetFactor(),
+        }
 
-        print(">> Result trend =", result_trend[0])
-        print(">> Length scale (theta) =", covariance_length_scale)
-        print(">> Amplitude (sigma^2) =", covariance_amplitude)
-
-        # Validate the kriging metamodel using the 'ot.MetaModelValidation' class
+        # Validate the kriging metamodel using the 'ot.MetaModelValidation' class and the hold out validation sample
         # ---------------------------
-        y_test_kh_sample = ot.Sample.BuildFromDataFrame(y_test_kh)
         self._validation_results = ot.MetaModelValidation(
-            x_test_kh, y_test_kh_sample, self._kriging_metamodel
+            self._x_validation, self._y_validation, kriging_metamodel
         )
-
-        Q2_coefficient = self._validation_results.computePredictivityFactor()[0]
-        print(">> Q2 =", "{:.6}".format(Q2_coefficient))
 
         kriging_residuals = np.array(
             self._validation_results.getResidualSample()
         ).flatten()
+
         kriging_conditional_variance = np.array(
-            self._kriging_result.getConditionalMarginalVariance(x_test_kh)
+            self._kriging_result.getConditionalMarginalVariance(self._x_validation)
         )
-        Predictive_Variance_Adequacy = np.abs(
-            np.log10(
+
+        # Be careful about the definition of PVA (with/without absolute value)
+        signed_predictive_variance_adequacy = np.log10(
                 np.sum((kriging_residuals**2) / kriging_conditional_variance)
                 / len(kriging_residuals)
             )
-        )
-        print(">> PVA =", "{:.6}".format(Predictive_Variance_Adequacy))
 
+        validation_metrics = {"Q2"          : self._validation_results.computePredictivityFactor()[0],
+                              "signed_PVA"  : signed_predictive_variance_adequacy
+        }
+
+        # Histogram of residuals
+        # --------------
+        ot.HistogramFactory().build(self._validation_results.getResidualSample()).drawPDF()
+        graph_histogram_residuals = (
+            self._validation_results.getResidualDistribution().drawPDF()
+        )
+        graph_histogram_residuals.setXTitle("Residuals")
+        graph_histogram_residuals.setLegends([""])
+
+        # Observed vs. predicted values
+        # --------------
+        graph_obs_vs_pred = self._validation_results.drawValidation()
+        graph_obs_vs_pred.setTitle(
+            "Obs. vs. Predict -- ($n_{valid}$ = %d)" % self._y_validation.getSize()
+        )
+
+        # QQ-plot
+        # --------------
+        y_predicted_on_validation_sample = kriging_metamodel(self._x_validation)
+        graph_QQ_plot = ot.VisualTest.DrawQQplot(self._y_validation, y_predicted_on_validation_sample)
+        graph_QQ_plot.setYTitle("Predictions")
+        graph_QQ_plot.setTitle("Two sample QQ-plot")
+
+        validation_graphs = {"residuals" :    graph_histogram_residuals,
+                             "observed_vs_predicted" : graph_obs_vs_pred,
+                             "QQplot" :  graph_QQ_plot
+                             }
+        
+        return kriging_hyperparameters, validation_metrics, validation_graphs
+    
+
+    def train_and_validate_kriging_metamodel_using_cross_validation(self):
+        """
+        TODO
+        """
         # def compute_Q2_predictivity_coefficient_by_kfold(self, n_folds=5):
         #     training_sample_size = self.input_kriging_sample.getSize()
         #     splitter = ot.KFoldSplitter(training_sample_size, n_folds)
@@ -703,61 +743,13 @@ class Icscream:
         #     Q2_score = Q2_score_list.computeMean()[0]
         #     return Q2_score
 
-        # Histogram of residuals
-        # --------------
-        residuals = self._validation_results.getResidualSample()
-        ot.HistogramFactory().build(residuals).drawPDF()
-        graph_histogram_residuals = (
-            self._validation_results.getResidualDistribution().drawPDF()
-        )
-        graph_histogram_residuals.setXTitle("Residuals")
-        graph_histogram_residuals.setLegends("")
-        view_residuals = otv.View(graph_histogram_residuals)
-        view_residuals.save(
-            self.figpath + "kriging_residuals_histogram.png",
-            dpi=150,
-            bbox_inches="tight",
-        )
-        view_residuals.save(
-            self.figpath + "kriging_residuals_histogram.pdf",
-            dpi=150,
-            bbox_inches="tight",
-        )
+    def construct_and_sample_x_tilda_distribution(
+        self, composed_distribution_X_Tilda, n_sample_X_Tilda=100
+    ):
+        # Cas 1 : on connait la distribution de X_tilda
 
-        # Observed vs. predicted values
-        # --------------
-        graph_observed_vs_predicted = self._validation_results.drawValidation()
-        graph_observed_vs_predicted.setTitle(
-            "Obs. vs. Predict -- ($n_{valid}$ = %d)" % test_size
-        )
-        view_observed_vs_predicted = otv.View(graph_observed_vs_predicted)
-        view_observed_vs_predicted.save(
-            self.figpath + "kriging_observed_vs_predicted.png",
-            dpi=150,
-            bbox_inches="tight",
-        )
-        view_observed_vs_predicted.save(
-            self.figpath + "kriging_observed_vs_predicted.pdf",
-            dpi=150,
-            bbox_inches="tight",
-        )
+        # Cas 2 : on apprend la distribution X_tilda
 
-        # QQ-plot
-        # --------------
-        y_predicted_on_test_sample = self._kriging_metamodel(x_test_kh)
-        graph_QQ_plot = ot.VisualTest.DrawQQplot(
-            y_test_kh_sample, y_predicted_on_test_sample
-        )
-        graph_QQ_plot.setXTitle("Validation data")
-        graph_QQ_plot.setYTitle("Predictions")
-        graph_QQ_plot.setTitle("Two sample QQ-plot")
-        view_QQ_plot = otv.View(graph_QQ_plot)
-        view_QQ_plot.save(
-            self.figpath + "kriging_QQ_plot.png", dpi=150, bbox_inches="tight"
-        )
-        view_QQ_plot.save(
-            self.figpath + "kriging_QQ_plot.pdf", dpi=150, bbox_inches="tight"
-        )
 
     def compute_conditional_probabilities(
         self, composed_distribution_X_Tilda, n_sample_X_Tilda=100
@@ -792,7 +784,7 @@ class Icscream:
                 )
             )
 
-        bounded_distribution_penalized = ot.ComposedDistribution(dist_penalized)
+        bounded_distribution_penalized = ot.JointDistribution(dist_penalized)
 
         new_sample_X_Penalized = bounded_distribution_penalized.getSample(
             n_sample_X_Tilda
