@@ -3,7 +3,7 @@
 """
 Copyright (C) EDF 2024
 
-@author: Vincent Chabridon
+@authors: Vincent Chabridon, Joseph Muré, Elias Fekhari
 """
 import os
 
@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 #plt.rcParams["text.usetex"] = True
 # from matplotlib import rc, rcParams, stylercParams['text.usetex'] = Truerc('font', **{'family': 'Times'})rc('text', usetex=True)rc('font', size=16)# Set the default text font sizerc('axes', titlesize=20)# Set the axes title font sizerc('axes', labelsize=16)# Set the axes labels font sizerc('xtick', labelsize=14)# Set the font size for x tick labelsrc('ytick', labelsize=16)# Set the font size for y tick labelsrc('legend', fontsize=16)# Set the legend font size`
 import time as tm
+from copy import deepcopy
 
 ot.Log.Show(ot.Log.NONE)
 import otkerneldesign as otkd
@@ -48,15 +49,19 @@ class Icscream:
     Parameters
     ----------
     random_distribution : :class:`openturns.Distribution`
-    scenario_distribution : :class:`openturns.Distribution`
+    penalized_distribution : :class:`openturns.Distribution`
     model : function
     dataset : pd.DataFrame
     random_variables_columns : list
-    scenario_variables_columns : list
+    penalized_variables_columns : list
     output_variable_column : list
     output_quantile_order : scalar
     p_value_threshold : scalar
     n_sim : integer
+
+    Notes
+    -----
+    The vectors of penalized and aleatory variables are assumed to be mutually independent.
 
     Examples
     --------
@@ -65,8 +70,10 @@ class Icscream:
 
     def __init__(
         self,
-        df_scenario=None,
+        df_penalized=None,
         df_aleatory=None,
+        dist_penalized=None,
+        dist_aleatory=None,
         df_output=None,
         covariance_collection=None,
         output_quantile_order=0.9,
@@ -74,36 +81,46 @@ class Icscream:
         n_perm=200,
     ):
         if (
-            (df_scenario is None)
+            (df_penalized is None)
             or (df_aleatory is None)
             or (df_output is None)
         ):
             raise ValueError(
-                "Please, provide lists corresponding to 'df_scenario'', 'df_aleatory' and 'df_output'."
+                "Please, provide lists corresponding to 'df_penalized'', 'df_aleatory' and 'df_output'."
             )
         else:
-            self._df_scenario = df_scenario
+            self._df_penalized = df_penalized
             self._df_aleatory = df_aleatory
 
-            self._df_input = pd.concat([self._df_scenario, self._df_aleatory], axis=1)
+            self._df_input = pd.concat([self._df_penalized, self._df_aleatory], axis=1)
             self._df_output = df_output
 
-            self._sample_scenario = ot.Sample(
-                self._df_scenario.values
+            self._sample_penalized = ot.Sample.BuildFromDataFrame(
+                self._df_penalized
             )
-            self._sample_aleatory = ot.Sample(
-                self._df_aleatory.values
+            self._sample_aleatory = ot.Sample.BuildFromDataFrame(
+                self._df_aleatory
             )
-            self._sample_output = ot.Sample(
-                self._df_output.values
+            self._sample_output = ot.Sample.BuildFromDataFrame(
+                self._df_output
             )
-            self._sample_input = ot.Sample(
-                pd.concat([self._sample_scenario, self._sample_aleatory], axis=1)
+            self._sample_input = ot.Sample.BuildFromDataFrame(
+                pd.concat([self._sample_penalized, self._sample_aleatory], axis=1)
             )
-            self._dim_scenario = self._sample_scenario.getDimension()
+            self._dim_penalized = self._sample_penalized.getDimension()
             self._dim_random = self._sample_aleatory.getDimension()
             self._dim_input = self._sample_input.getDimension()
 
+        ## WARNING: set the component names for the aleatory and penalized distributions
+        self._dist_penalized = dist_penalized
+        self._dist_aleatory = dist_aleatory
+
+        if dist_penalized is not None:
+            self._dist_penalized.setDescription(self._sample_penalized.getDescription())
+
+        if dist_aleatory is not None:
+            self._dist_aleatory.setDescription(self._sample_aleatory.getDescription())
+        
         self._output_quantile_order = output_quantile_order
         self._empirical_quantile = self._sample_output.computeQuantile(
             self._output_quantile_order
@@ -130,7 +147,7 @@ class Icscream:
         self._TSA_study = None
         self._CSA_study = None
 
-        df_columns = self._df_scenario.columns.tolist() + self._df_aleatory.columns.tolist()
+        df_columns = self._df_penalized.columns.tolist() + self._df_aleatory.columns.tolist()
 
         self._GSA_results = pd.DataFrame([],columns=df_columns,index=[],)
         self._TSA_results = pd.DataFrame([],columns=df_columns,index=[],)
@@ -161,9 +178,14 @@ class Icscream:
         self._kriging_result = None
         self._kriging_metamodel = None
         self._kriging_algo = None
-
-
         self._validation_results = None
+
+        self._sample_X_Tilda = None
+        self._sample_X_penalized = None
+
+        self._full_sample = None
+        self._full_sample_variable_names = None
+
         self._X_Penalized_data = None
         self._X_Penalized_sample = None
         # self.Conditional_Probabilities_Results = pd.DataFrame([], columns = self.X_Penalized, index=[])
@@ -460,7 +482,7 @@ class Icscream:
 
         # Penalized variables
         # ---------------------------
-        self._X_Penalized = self._df_scenario.columns.tolist()
+        self._X_Penalized = self._df_penalized.columns.tolist()
 
         # Explanatory variables
         # ---------------------------
@@ -529,6 +551,9 @@ class Icscream:
     
     
     def build_kriging_data(self):
+        ## WARNING:
+        ## It is assumed that the data are already scaled.
+
         # Loading input and output data
         # ---------------------------
         self._x_data = self._sample_input.getMarginal([self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation])
@@ -620,7 +645,8 @@ class Icscream:
         self._kriging_algo.setOptimizationAlgorithm(
             ot.MultiStart(
                 ot.NLopt(optimization_algo),
-                ot.LHSExperiment(bounded_dist_multi, nsample_multistart).generate(),
+                ## ot.LHSExperiment(bounded_dist_multi, nsample_multistart).generate(),
+                ot.LowDiscrepancyExperiment(ot.SobolSequence(), bounded_dist_multi, nsample_multistart, True),
             )
         )
         # kriging_algo.setOptimizationBounds(optim_bounds) ## Hypothesis: data already scaled
@@ -744,11 +770,96 @@ class Icscream:
         #     return Q2_score
 
     def construct_and_sample_x_tilda_distribution(
-        self, composed_distribution_X_Tilda, n_sample_X_Tilda=100
+        self, dist_aleatory, n_sample_X_Tilda=1000, method_compute_m_ebc="AMISE",
     ):
-        # Cas 1 : on connait la distribution de X_tilda
+        if self._dist_aleatory is not None:
+            # Case #1 - The distribution of X_Tilda is already known 
+            # --------------
+            sample_X_aleatory = dist_aleatory.getSample(n_sample_X_Tilda)
+            self._sample_X_Tilda = sample_X_aleatory.getMarginal(self._X_Tilda)
+        else:
+            # Case #2 - The distribution of X_Tilda is not known and should be learnt
+            # --------------
+            learning_sample_X_Tilda = self._sample_aleatory.getMarginal(self._X_Tilda)
+            joint_distribution_X_Tilda = self.fit_distribution_from_sample(learning_sample_X_Tilda, method_compute_m_ebc)       
+            self._sample_X_Tilda = joint_distribution_X_Tilda.getSample(n_sample_X_Tilda)
 
-        # Cas 2 : on apprend la distribution X_tilda
+        return self._sample_X_Tilda
+    
+    def construct_and_sample_x_penalized_distribution(
+        self, dist_penalized, n_sample_X_penalized=1000, method_compute_m_ebc="AMISE",
+    ):
+        if self.dist_penalized is not None:
+            # Case #1 - The distribution of X_Penalized is already known 
+            # --------------
+            self._sample_X_penalized = dist_penalized.getSample(n_sample_X_penalized)
+        else:
+            # Case #2 - The distribution of X_Penalized is not known and should be learnt
+            # --------------
+            joint_distribution_X_penalized = self.fit_distribution_from_sample(self._sample_penalized, method_compute_m_ebc)       
+            self._sample_X_penalized = joint_distribution_X_penalized.getSample(n_sample_X_penalized)
+
+        return self._sample_X_penalized
+    
+    @staticmethod
+    def fit_distribution_from_sample(learning_sample, method_compute_m_ebc="AMISE"):
+
+        # Fit of the marginals using KDE
+        ks = ot.KernelSmoothing()
+        ks.setBoundaryCorrection(True)
+        list_marginals = []          
+        for varname in learning_sample.getDescription():
+            marg = ks.buildAsTruncatedDistribution(learning_sample.getMarginal([varname]))
+            list_marginals.append(marg)
+            
+        # Fit of the copula using the Empirical Bernstein Copula
+        ## Methods for the m parameter calculation: "AMISE", "LogLikelihood", "PenalizedCsiszarDivergence"
+        bcf = ot.BernsteinCopulaFactory()
+        fitted_ebc = bcf.buildAsEmpiricalBernsteinCopula(learning_sample, method_compute_m_ebc)
+        
+        # Create the joint distribution of X_Tilda
+        joint_distribution = ot.JointDistribution(list_marginals, fitted_ebc)
+
+        return joint_distribution
+    
+    def compute_mean_effect(self, varindex, value):
+
+        # Create a new full_sample with a frozen column 
+        # --------------
+        ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
+        ## WARNING: this method assumes that the frozen variable is mutually independent from the others. This might be a limitation if the variables are dependent.
+        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column[:,varindex] = [[value]]*full_sample_frozen_column.getSize()
+
+        # Apply the predictor to compute mean effect 
+        # --------------
+        output_sample_frozen_column = self._kriging_metamodel(full_sample_frozen_column)
+        mean_effect = output_sample_frozen_column.computeMean()[0]
+
+        return mean_effect
+    
+    def build_mean_effect_function(self, varname):
+
+        # Compute varindex from varname 
+        # --------------
+        varindex = self._full_sample_variable_names.index(varname)
+        
+        # Create the mean_effect_function 
+        # --------------
+        def mean_effect_function(x):
+            return self.compute_mean_effect(varindex, x)
+        
+        return mean_effect_function
+    
+    #def compute_interaction_effect()
+    #def_compute_probab
+
+    def create_full_sample_for_metamodel_prediction(self):
+        ## Create a full sample for the metamodel to be used to compute several quantities
+        full_sample = ot.Sample(np.hstack([self._sample_X_penalized, self._sample_X_Tilda]))
+        full_sample.setDescription(self._X_Penalized + self._X_Tilda)
+        self._full_sample_variable_names = self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation
+        self._full_sample = full_sample.getMarginal(self._full_sample_variable_names)
 
 
     def compute_conditional_probabilities(
