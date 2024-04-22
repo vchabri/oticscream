@@ -41,7 +41,6 @@ import otkerneldesign as otkd
 # - TODO : traiter un .CSV comme dictionnaire des distributions des entrées (lois et bornes)
 # """
 
-
 class Icscream:
     """
     Description TODO.
@@ -185,6 +184,10 @@ class Icscream:
 
         self._full_sample = None
         self._full_sample_variable_names = None
+        self._X_Penalized_indices_within_full_sample = None
+
+        ## Create a standard normal OpenTURNS object
+        self._standard_normal_distribution = ot.Normal()
 
         self._X_Penalized_data = None
         self._X_Penalized_sample = None
@@ -673,11 +676,11 @@ class Icscream:
 
         # Get kriging results and kriging metamodel
         # ---------------------------
-        kriging_result = self._kriging_algo.getResult()
-        kriging_metamodel = self._kriging_algo.getMetaModel()
+        self._kriging_result = self._kriging_algo.getResult()
+        self._kriging_metamodel = self._kriging_algo.getMetaModel()
 
-        result_trend = kriging_result.getTrendCoefficients()
-        result_covariance_model = kriging_result.getCovarianceModel()
+        result_trend = self._kriging_result.getTrendCoefficients()
+        result_covariance_model = self._kriging_result.getCovarianceModel()
 
         kriging_hyperparameters = {"trend"       : result_trend,
                                    "lengthscale" : result_covariance_model.getScale(), #theta
@@ -688,7 +691,7 @@ class Icscream:
         # Validate the kriging metamodel using the 'ot.MetaModelValidation' class and the hold out validation sample
         # ---------------------------
         self._validation_results = ot.MetaModelValidation(
-            self._x_validation, self._y_validation, kriging_metamodel
+            self._x_validation, self._y_validation, self._kriging_metamodel
         )
 
         kriging_residuals = np.array(
@@ -727,7 +730,7 @@ class Icscream:
 
         # QQ-plot
         # --------------
-        y_predicted_on_validation_sample = kriging_metamodel(self._x_validation)
+        y_predicted_on_validation_sample = self._kriging_metamodel(self._x_validation)
         graph_QQ_plot = ot.VisualTest.DrawQQplot(self._y_validation, y_predicted_on_validation_sample)
         graph_QQ_plot.setYTitle("Predictions")
         graph_QQ_plot.setTitle("Two sample QQ-plot")
@@ -822,7 +825,7 @@ class Icscream:
 
         return joint_distribution
     
-    def compute_mean_effect(self, varindex, value):
+    def compute_1D_conditional_mean(self, varindex, value):
 
         # Create a new full_sample with a frozen column 
         # --------------
@@ -831,168 +834,197 @@ class Icscream:
         full_sample_frozen_column = deepcopy(self._full_sample)
         full_sample_frozen_column[:,varindex] = [[value]]*full_sample_frozen_column.getSize()
 
-        # Apply the predictor to compute mean effect 
+        # Apply the predictor to compute 1D conditional mean 
         # --------------
         output_sample_frozen_column = self._kriging_metamodel(full_sample_frozen_column)
-        mean_effect = output_sample_frozen_column.computeMean()[0]
+        one_dimensional_conditional_mean = output_sample_frozen_column.computeMean()
 
-        return mean_effect
+        return one_dimensional_conditional_mean
     
-    def build_mean_effect_function(self, varname):
+    def build_1D_conditional_mean(self, varname):
 
         # Compute varindex from varname 
         # --------------
         varindex = self._full_sample_variable_names.index(varname)
         
-        # Create the mean_effect_function 
+        # Create the one_dimensional_conditional_mean_function 
         # --------------
-        def mean_effect_function(x):
-            return self.compute_mean_effect(varindex, x)
+        def one_dimensional_conditional_mean_function(x):
+            ## WARNING: here, x should be a list of size 1 (useful to create an OpenTURNS PythonFunction)
+            return self.compute_1D_conditional_mean(varindex, x[0])
         
-        return mean_effect_function
+        return one_dimensional_conditional_mean_function
     
-    #def compute_interaction_effect()
-    #def_compute_probab
+    def compute_2D_conditional_mean(self, varindex1, varindex2, value1, value2):
+
+        # Create a new full_sample with two frozen columns 
+        # --------------
+        ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
+        ## WARNING: this method assumes that the frozen variables are mutually independent from the others. This might be a limitation if the variables are dependent.
+        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column[:,varindex1] = [[value1]]*full_sample_frozen_column.getSize()
+        full_sample_frozen_column[:,varindex2] = [[value2]]*full_sample_frozen_column.getSize()
+
+        # Apply the predictor to compute 2D conditional mean 
+        # --------------
+        output_sample_frozen_column = self._kriging_metamodel(full_sample_frozen_column)
+        two_dimensional_conditional_mean = output_sample_frozen_column.computeMean()
+
+        return two_dimensional_conditional_mean
+    
+    def build_2D_conditional_mean(self, varname1, varname2):
+
+        # Check
+        # --------------
+        if varname1==varname2:
+            raise ValueError("Arguments 'varname1' and 'varname2' must be different.")
+
+        # Compute varindex from varname 
+        # --------------
+        varindex1 = self._full_sample_variable_names.index(varname1)
+        varindex2 = self._full_sample_variable_names.index(varname2)
+        
+        # Create the two_dimensional_conditional_mean_function 
+        # --------------
+        def two_dimensional_conditional_mean_function(x):
+            ## WARNING: here, x should be a list of size 2 (useful to create an OpenTURNS PythonFunction)
+            return self.compute_2D_conditional_mean(varindex1, varindex2, x[0], x[1])
+        
+        return two_dimensional_conditional_mean_function
+    
+    def compute_allpenalized_conditional_mean(self, values):
+
+        # Create a new full_sample with all frozen columns corresponding to the whole penalized input vector 
+        # --------------
+        full_sample_frozen_column = deepcopy(self._full_sample)
+        penalized_sample_columns = ot.Sample(full_sample_frozen_column.getSize(), values)
+        full_sample_frozen_column[:,self._X_Penalized_indices_within_full_sample] = penalized_sample_columns
+
+        # Apply the predictor to compute the GP conditional mean wrt all the penalized inputs
+        # --------------
+        output_sample_frozen_column = self._kriging_metamodel(full_sample_frozen_column)
+        all_penalized_conditional_mean = output_sample_frozen_column.computeMean()
+
+        return all_penalized_conditional_mean
+    
+    def build_allpenalized_conditional_mean(self):
+        # This function is useful in order to create an OpenTURNS PythonFunction with associated methods.
+
+        # Create the all_penalized_conditional_mean_function 
+        # --------------
+        def all_penalized_conditional_mean_function(x):
+            return self.compute_allpenalized_conditional_mean(x)
+        
+        return all_penalized_conditional_mean_function
+    
+    def compute_conditional_exceedance_probability_from_metamodel(self, full_sample):
+
+        # Apply the metamodel predictor and variance operators
+        # --------------
+        mean_Gp = self._kriging_result.getConditionalMean(full_sample)
+        var_Gp = self._kriging_result.getConditionalMarginalVariance(full_sample)
+
+        # Compute the ratio and integrand 
+        # --------------
+        ratio = (self._empirical_quantile - np.array(mean_Gp)) / np.sqrt(np.array(var_Gp))
+        integrand = self._standard_normal_distribution.computeSurvivalFunction(ratio)
+
+        # Compute the exceedance probability 
+        # --------------
+        exceedance_probability = integrand.computeMean()
+
+        return exceedance_probability
+
+    def compute_1D_conditional_exceedance_probability(self, varindex, value):
+
+        # Create a new full_sample with a frozen column 
+        # --------------
+        ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
+        ## WARNING: this method assumes that the frozen variable is mutually independent from the others. This might be a limitation if the variables are dependent.
+        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column[:,varindex] = [[value]]*full_sample_frozen_column.getSize()
+
+        return self.compute_conditional_exceedance_probability_from_metamodel(full_sample_frozen_column)
+    
+    def build_1D_conditional_exceedance_probability(self, varname):
+
+        # Compute varindex from varname 
+        # --------------
+        varindex = self._full_sample_variable_names.index(varname)
+        
+        # Create the 1D conditional exceedance probability function 
+        # --------------
+        def one_dimensional_conditional_exceedance_probability(x):
+            ## WARNING: here, x should be a list of size 1 (useful to create an OpenTURNS PythonFunction)
+            return self.compute_1D_conditional_exceedance_probability(varindex, x[0])
+        
+        return one_dimensional_conditional_exceedance_probability
+    
+    def compute_2D_conditional_exceedance_probability(self, varindex1, varindex2, value1, value2):
+
+        # Create a new full_sample with two frozen columns 
+        # --------------
+        ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
+        ## WARNING: this method assumes that the frozen variables are mutually independent from the others. This might be a limitation if the variables are dependent.
+        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column[:,varindex1] = [[value1]]*full_sample_frozen_column.getSize()
+        full_sample_frozen_column[:,varindex2] = [[value2]]*full_sample_frozen_column.getSize()
+
+        return self.compute_conditional_exceedance_probability_from_metamodel(full_sample_frozen_column)
+    
+    def build_2D_conditional_exceedance_probability(self, varname1, varname2):
+
+        # Check
+        # --------------
+        if varname1==varname2:
+            raise ValueError("Arguments 'varname1' and 'varname2' must be different.")
+
+        # Compute varindex from varname 
+        # --------------
+        varindex1 = self._full_sample_variable_names.index(varname1)
+        varindex2 = self._full_sample_variable_names.index(varname2)
+        
+        # Create the two_dimensional_conditional_exceedance_probability_function 
+        # --------------
+        def two_dimensional_conditional_exceedance_probability_function(x):
+            ## WARNING: here, x should be a list of size 2 (useful to create an OpenTURNS PythonFunction)
+            return self.compute_2D_conditional_exceedance_probability(varindex1, varindex2, x[0], x[1])
+        
+        return two_dimensional_conditional_exceedance_probability_function
+
+    def compute_allpenalized_conditional_exceedance_probability(self, values):
+
+        # Create a new full_sample with all frozen columns corresponding to the whole penalized input vector 
+        # --------------
+        full_sample_frozen_column = deepcopy(self._full_sample)
+        penalized_sample_columns = ot.Sample(full_sample_frozen_column.getSize(), values)
+        full_sample_frozen_column[:,self._X_Penalized_indices_within_full_sample] = penalized_sample_columns
+
+        return self.compute_conditional_exceedance_probability_from_metamodel(full_sample_frozen_column)
+    
+    def build_allpenalized_conditional_exceedance_probability(self):
+        # This function is useful in order to create an OpenTURNS PythonFunction with associated methods.
+
+        # Create the allpenalized_conditional_exceedance_probability_function 
+        # --------------
+        def allpenalized_conditional_exceedance_probability_function(x):
+            return self.compute_allpenalized_conditional_exceedance_probability(x)
+        
+        return allpenalized_conditional_exceedance_probability_function
 
     def create_full_sample_for_metamodel_prediction(self):
+        
+        ## WARNING: the term 'full_sample' denotes all the inputs involved in the GP metamodel regression
         ## Create a full sample for the metamodel to be used to compute several quantities
         full_sample = ot.Sample(np.hstack([self._sample_X_penalized, self._sample_X_Tilda]))
         full_sample.setDescription(self._X_Penalized + self._X_Tilda)
+
+        # Modify the order of the inputs wrt the ranking order obtained from GSA/TSA
         self._full_sample_variable_names = self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation
         self._full_sample = full_sample.getMarginal(self._full_sample_variable_names)
 
+        # Get the positions of the X_penalized inputs within the full_sample
+        self._X_Penalized_indices_within_full_sample = [ind for ind, item in enumerate(self._X_Explanatory) if item in self._X_Penalized]
 
-    def compute_conditional_probabilities(
-        self, composed_distribution_X_Tilda, n_sample_X_Tilda=100
-    ):
-        # Sample X_Tilda according to its distribution
-        # --------------
-        sample_X_Tilda = composed_distribution_X_Tilda.getSample(n_sample_X_Tilda)
-        sample_X_Tilda.setDescription(self._X_Tilda)
-
-        # Discretize intervals of penalized inputs
-        # --------------
-        self._X_Penalized_data = self.dataset[self._X_Penalized]
-        self._X_Penalized_sample = ot.Sample.BuildFromDataFrame(self._X_Penalized_data)
-
-        min_penalized = []
-        max_penalized = []
-
-        for colname in self._X_Penalized_data.columns:
-            selected_column = self._X_Penalized_data[colname]
-            array_column = np.array(selected_column).reshape(-1, 1)
-            min_penalized.append(np.min(array_column))
-            max_penalized.append(np.max(array_column))
-
-        bounds_penalized = ot.Interval(min_penalized, max_penalized)
-
-        dist_penalized = ot.DistributionCollection()
-        for k in range(len(self._X_Penalized)):
-            dist_penalized.add(
-                ot.Uniform(
-                    bounds_penalized.getLowerBound()[k],
-                    bounds_penalized.getUpperBound()[k],
-                )
-            )
-
-        bounded_distribution_penalized = ot.JointDistribution(dist_penalized)
-
-        new_sample_X_Penalized = bounded_distribution_penalized.getSample(
-            n_sample_X_Tilda
-        )
-        new_sample_X_Penalized.setDescription(self._X_Penalized)
-        # print("new_sample_X_Penalized =", new_sample_X_Penalized)
-
-        array_X_Penalized = np.array(new_sample_X_Penalized)
-        # print("array_X_Penalized =", array_X_Penalized)
-
-        # Compute conditional probabilities
-        # --------------
-        self._list_probabilities_x_pen = []
-
-        for k in range(len(self._X_Penalized)):
-            results_probabilities = {}
-            print("k =", k)
-            array_column = np.array(new_sample_X_Penalized[:, k]).reshape(-1, 1)
-            # print(array_column)
-            for j in array_column:
-                # print("j =", j)
-                x_pen = j[0]
-                # print("x_pen =", x_pen)
-                # x_pen = np.repeat([x_pen], n_sample_X_Tilda, axis=0)
-                x_pen_tot = array_X_Penalized.copy()
-                x_pen_tot[:, k] = x_pen
-                # print("array_X_Penalized =", array_X_Penalized)
-                # print("x_pen_tot =", x_pen_tot)
-                x_joint = np.concatenate([x_pen_tot, np.array(sample_X_Tilda)], axis=1)
-                # print("x_joint =", x_joint)
-
-                mean_Gp = self._kriging_result.getConditionalMean(x_joint)
-                var_Gp = self._kriging_result.getConditionalMarginalVariance(x_joint)
-                ratio_integrand = (
-                    self._empirical_quantile - np.array(mean_Gp)
-                ) / np.sqrt(np.array(var_Gp))
-                proba_x_pen = 1 - np.mean(ot.Normal().computeCDF(ratio_integrand))
-
-                # self.Conditional_Probabilities_Results.loc[j, k] = proba_x_pen
-
-                results_probabilities["proba_x_pen_" + str(j[0])] = [j[0], proba_x_pen]
-                # print("results_probabilities =", self.results_probabilities)
-                # list_probabilities.append(proba_x_pen)
-            self._list_probabilities_x_pen.append([k, results_probabilities])
-
-        # Draw conditional probabilities
-        # --------------
-        plt.figure()
-        for k in range(len(self._X_Penalized)):
-            a = self._list_probabilities_x_pen[k][1].values()
-            values_array = np.array([i for i in a])
-            b = values_array[values_array[:, 0].argsort()]
-            x = b[:, 0]
-            y = b[:, 1]
-            plt.xlabel("X_{pen} range")
-            plt.ylabel("proba")
-            plt.scatter(x, y, marker="o")
-            plt.plot(x, y, linestyle="--")
-            # plt.grid(axis='x', color='0.95')
-            plt.legend()
-            plt.grid(True)
-            # plt.title('le titre')
-        plt.show()
-        plt.savefig(
-            self.figpath + "Conditional_Probabilities.png", dpi=150, bbox_inches="tight"
-        )
-        plt.savefig(
-            self.figpath + "Conditional_Probabilities.pdf", dpi=150, bbox_inches="tight"
-        )
-
-        # plt.plot(xi, y, marker='o', linestyle='--', color='r', label='Square')
-        # plt.xlabel('x')
-        # plt.ylabel('y')
-        # plt.xticks(xi, x)
-        # plt.title('compare')
-        # plt.legend()
-        # plt.show()
-
-        # import numpy as np
-        # import matplotlib.pyplot as plt
-
-        # x = np.arange(14)
-        # y = np.sin(x / 2)
-
-        # plt.step(x, y + 2, label='pre (default)')
-        # plt.plot(x, y + 2, 'o--', color='grey', alpha=0.3)
-
-        # plt.step(x, y + 1, where='mid', label='mid')
-        # plt.plot(x, y + 1, 'o--', color='grey', alpha=0.3)
-
-        # plt.step(x, y, where='post', label='post')
-        # plt.plot(x, y, 'o--', color='grey', alpha=0.3)
-
-        # plt.grid(axis='x', color='0.95')
-        # plt.legend(title='Parameter where:')
-        # plt.title('plt.step(where=...)')
-        # plt.show()
-
-        # ## Attention -> Ajouter un Check sur l'ordre de la concaténation des X_PEN / X_TILDA
-        # ## Bonne pratique => toujours mettre les X_PEN en premier au départ d'oticscream
+    ## REMARK: we still enable the user to define proper OpenTURNS' PythonFunction objects or to call directly the Python functions already defined to use them 
+    ## exampleuse = ot.PythonFunction(1,1,icscream.build_1D_conditional_mean())
