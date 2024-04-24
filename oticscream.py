@@ -9,11 +9,13 @@ import os
 
 work_path = "/home/g44079/Documents/01_PROJETS/THCOEURS/oticscream/oticscream"
 os.chdir(work_path)
+
+import numpy as np
 import openturns as ot
 
 print("OpenTURNS version:", ot.__version__)
 import openturns.viewer as otv
-import numpy as np
+
 from scipy.spatial.distance import pdist
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -104,7 +106,7 @@ class Icscream:
                 self._df_output
             )
             self._sample_input = ot.Sample.BuildFromDataFrame(
-                pd.concat([self._sample_penalized, self._sample_aleatory], axis=1)
+                self._df_input
             )
             self._dim_penalized = self._sample_penalized.getDimension()
             self._dim_random = self._sample_aleatory.getDimension()
@@ -130,7 +132,7 @@ class Icscream:
         if covariance_collection is None:
             input_covariance_collection = []
             for i in range(self._dim_input):
-                Xi = self.input_sample.getMarginal(i)
+                Xi = self._sample_input.getMarginal(i)
                 input_covariance = ot.SquaredExponential(1)
                 input_covariance.setScale(Xi.computeStandardDeviation())
                 input_covariance_collection.append(input_covariance)
@@ -220,13 +222,11 @@ class Icscream:
         #graph_output.setColors(["dodgerblue3", "darkorange1"])
         graph_output.setLegends(["Histogram", "KDE", "Mean", "Median", "Empirical quantile"])
         graph_output.setLegendPosition("topright")
-        graph_output.setTitle("Empirical quantile =", "{:.6}".format(self._empirical_quantile))
+        graph_output.setTitle("Empirical quantile = {:.6}".format(self._empirical_quantile))
         graph_output.setXTitle("Y")
         graph_output.setYTitle("")
         
-        return graph_output
-
-    def set_permutation_size(self, n_perm):
+        return g#------------------#ation_size(self, n_perm):
         self._n_perm = n_perm
 
     def perform_GSA_study(self, hsic_estimator_type=ot.HSICUStat(), savefile=None):
@@ -260,8 +260,8 @@ class Icscream:
         filter_function = ot.ComposedFunction(phi, dist_to_critical_domain)
 
         self._TSA_study = ot.HSICEstimatorTargetSensitivity(
-            self.covariance_collection,
-            self.input_sample,
+            self._covariance_collection,
+            self._sample_input,
             self._sample_output,
             hsic_estimator_type,
             filter_function,
@@ -290,8 +290,8 @@ class Icscream:
         filter_function = ot.ComposedFunction(phi, dist_to_critical_domain)
 
         self._CSA_study = ot.HSICEstimatorConditionalSensitivity(
-            self.covariance_collection,
-            self.input_sample,
+            self._covariance_collection,
+            self._sample_input,
             self._sample_output,
             filter_function,
         )
@@ -440,25 +440,27 @@ class Icscream:
             2 * np.minimum(pval_GSA, pval_TSA), 1
         )
 
-        # Other advanced statistics used for aggregation
-        # ---------------------------
-        self._Aggregated_pval_results.loc["Fisher p-values", :] = -np.log(
-            pval_GSA.astype("float64")
-        ) - np.log(pval_TSA.astype("float64"))
-        self._Aggregated_pval_results.loc["Tippet p-values", :] = 1 - np.minimum(
-            pval_GSA, pval_TSA
-        )
+        # WARNING: TODO below: create an exception in order to handle the case of null p-values (1/0)
 
-        for i, colname in enumerate(self._sample_input.getDescription()):
-            invgamma_dist_GSA = ot.InverseGamma(1 / pval_GSA[i], 1.0)
-            invgamma_dist_TSA = ot.InverseGamma(1 / pval_TSA[i], 1.0)
-            self._Aggregated_pval_results.loc[
-                "InvGamma p-values", colname
-            ] = invgamma_dist_GSA.computeCDF(
-                1 - pval_GSA[i]
-            ) + invgamma_dist_TSA.computeCDF(
-                1 - pval_TSA[i]
-            )
+        # # Other advanced statistics used for aggregation
+        # # ---------------------------
+        # self._Aggregated_pval_results.loc["Fisher p-values", :] = -np.log(
+        #     pval_GSA.astype("float64")
+        # ) - np.log(pval_TSA.astype("float64"))
+        # self._Aggregated_pval_results.loc["Tippet p-values", :] = 1 - np.minimum(
+        #     pval_GSA, pval_TSA
+        # )
+
+        # for i, colname in enumerate(self._sample_input.getDescription()):
+        #     invgamma_dist_GSA = ot.InverseGamma(1 / pval_GSA[i], 1.0)
+        #     invgamma_dist_TSA = ot.InverseGamma(1 / pval_TSA[i], 1.0)
+        #     self._Aggregated_pval_results.loc[
+        #         "InvGamma p-values", colname
+        #     ] = invgamma_dist_GSA.computeCDF(
+        #         1 - pval_GSA[i]
+        #     ) + invgamma_dist_TSA.computeCDF(
+        #         1 - pval_TSA[i]
+        #     )
 
         # Variable ranking based on the level of the test (first-kind error)
         # ---------------------------
