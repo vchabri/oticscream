@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 # from matplotlib import rc, rcParams, stylercParams['text.usetex'] = Truerc('font', **{'family': 'Times'})rc('text', usetex=True)rc('font', size=16)# Set the default text font sizerc('axes', titlesize=20)# Set the axes title font sizerc('axes', labelsize=16)# Set the axes labels font sizerc('xtick', labelsize=14)# Set the font size for x tick labelsrc('ytick', labelsize=16)# Set the font size for y tick labelsrc('legend', fontsize=16)# Set the legend font size`
 import time as tm
 from copy import deepcopy
+import pickle
 
 ot.Log.Show(ot.Log.NONE)
 import otkerneldesign as otkd
@@ -42,6 +43,33 @@ import otkerneldesign as otkd
 # - Séparer les méthodes d'entrainement et de validation du MM de krigeage
 # - TODO : traiter un .CSV comme dictionnaire des distributions des entrées (lois et bornes)
 # """
+
+
+def get_indices(greedysupportpoints, sample):
+    """
+    When provided a subsample of the candidate set, returns the indices of its points in the candidate set.
+
+    Parameters
+    ----------
+    sample : 2-d list of float
+        A subsample of the candidate set.
+
+    Returns
+    -------
+    indices : list of int
+        Indices of the points of the sample within the candidate set.
+    """
+    sample = np.array(sample)
+    if len(sample.shape) != 2:
+        raise ValueError("Not a sample: shape is {} instead of 2.".format(len(sample.shape)))
+    candidate_array = np.array(greedysupportpoints._candidate_set) # convert to numpy array so np.where works
+    indices = []
+    for sample_index, pt in enumerate(sample):
+        index = np.where((candidate_array==pt).prod(axis=1))[0]
+        if len(index) != 1:
+            raise ValueError("The point {}, with index {} in the sample, is not in the candidate set.".format(pt, sample_index))
+        indices.extend(index)
+    return indices
 
 class Icscream:
     """
@@ -89,28 +117,27 @@ class Icscream:
             raise ValueError(
                 "Please, provide lists corresponding to 'df_penalized'', 'df_aleatory' and 'df_output'."
             )
-        else:
-            self._df_penalized = df_penalized
-            self._df_aleatory = df_aleatory
+        self._df_penalized = df_penalized
+        self._df_aleatory = df_aleatory
 
-            self._df_input = pd.concat([self._df_penalized, self._df_aleatory], axis=1)
-            self._df_output = df_output
+        self._df_input = pd.concat([self._df_penalized, self._df_aleatory], axis=1)
+        self._df_output = df_output
 
-            self._sample_penalized = ot.Sample.BuildFromDataFrame(
-                self._df_penalized
-            )
-            self._sample_aleatory = ot.Sample.BuildFromDataFrame(
-                self._df_aleatory
-            )
-            self._sample_output = ot.Sample.BuildFromDataFrame(
-                self._df_output
-            )
-            self._sample_input = ot.Sample.BuildFromDataFrame(
-                self._df_input
-            )
-            self._dim_penalized = self._sample_penalized.getDimension()
-            self._dim_random = self._sample_aleatory.getDimension()
-            self._dim_input = self._sample_input.getDimension()
+        self._sample_penalized = ot.Sample.BuildFromDataFrame(
+            self._df_penalized
+        )
+        self._sample_aleatory = ot.Sample.BuildFromDataFrame(
+            self._df_aleatory
+        )
+        self._sample_output = ot.Sample.BuildFromDataFrame(
+            self._df_output
+        )
+        self._sample_input = ot.Sample.BuildFromDataFrame(
+            self._df_input
+        )
+        self._dim_penalized = self._sample_penalized.getDimension()
+        self._dim_random = self._sample_aleatory.getDimension()
+        self._dim_input = self._sample_input.getDimension()
 
         ## WARNING: set the component names for the aleatory and penalized distributions
         self._dist_penalized = dist_penalized
@@ -193,8 +220,23 @@ class Icscream:
 
         self._X_Penalized_data = None
         self._X_Penalized_sample = None
-        # self.Conditional_Probabilities_Results = pd.DataFrame([], columns = self.X_Penalized, index=[])
         self._list_probabilities_x_pen = None
+
+    def save(self, filename):
+        attribute_names = self.__dict__.keys() # Get the list of attribute names
+        with open(filename, "wb") as f:
+            for name in attribute_names:
+                ## cf. Issue #2624 on openturns' github
+                if "study" in name and getattr(self, name) is not None:
+                    pickle.dump("placeholder", f) # Handle the case of a "_study_" (TO REMOVE ONCE BUG IS FIXED)
+                else:
+                    pickle.dump(getattr(self, name), f) # Save the attributes of the self.__dict__
+
+    def load(self, filename):
+        attribute_names = self.__dict__.keys() # Get the list of attribute names
+        with open(filename, "rb") as f:
+            for name in attribute_names:
+                setattr(self, name, pickle.load(f)) # Load each attribute in the initial order        
 
     def draw_output_sample_analysis(self):
         hist = ot.HistogramFactory().build(self._sample_output)
@@ -226,7 +268,9 @@ class Icscream:
         graph_output.setXTitle("Y")
         graph_output.setYTitle("")
         
-        return g#------------------#ation_size(self, n_perm):
+        return graph_output
+    
+    def set_permutation_size(self, n_perm):
         self._n_perm = n_perm
 
     def perform_GSA_study(self, hsic_estimator_type=ot.HSICUStat(), savefile=None):
@@ -561,7 +605,7 @@ class Icscream:
 
         # Loading input and output data
         # ---------------------------
-        self._x_data = self._sample_input.getMarginal([self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation])
+        self._x_data = self._sample_input.getMarginal(self._X_Explanatory + self._X_Secondary_Influential_Inputs_after_aggregation)
         self._y_data = self._sample_output
 
         # Scaling input data
@@ -584,7 +628,9 @@ class Icscream:
         validation_size = int(self._x_data.getSize() * test_ratio)
         greedy_sp = otkd.GreedySupportPoints(candidate_set=self._x_data) # Energy distance kernel
         greedy_sp_design = greedy_sp.select_design(self._x_data.getSize())
-        greedy_sp_indices = greedy_sp.get_indices(greedy_sp_design)
+        ##greedy_sp_indices = greedy_sp.get_indices(greedy_sp_design)  # code to save in the future
+        #WARNING : BUG (Issue #6 here: https://github.com/efekhari27/otkerneldesign/issues)
+        greedy_sp_indices = get_indices(greedy_sp, greedy_sp_design)  # to remove in the future
         print(">> validation_size =", validation_size)
 
         # Build the learn and validation indices
@@ -1029,4 +1075,4 @@ class Icscream:
         self._X_Penalized_indices_within_full_sample = [ind for ind, item in enumerate(self._X_Explanatory) if item in self._X_Penalized]
 
     ## REMARK: we still enable the user to define proper OpenTURNS' PythonFunction objects or to call directly the Python functions already defined to use them 
-    ## exampleuse = ot.PythonFunction(1,1,icscream.build_1D_conditional_mean())
+    ## exampleuse = ot.PythonFunction(1,1,icscream.build_1D_conditional_mean(x13))

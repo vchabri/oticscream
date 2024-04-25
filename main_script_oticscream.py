@@ -26,7 +26,6 @@ d = d_aleatory + d_penalized
 distributionList = [ot.Uniform(0.0, 1.0) for i in range(d)]
 myDistribution = ot.JointDistribution(distributionList)
 
-
 def ModifiedFriedmanModel(X):
     X = ot.Point(X)
     d = X.getDimension()
@@ -46,7 +45,6 @@ def ModifiedFriedmanModel(X):
         + r
     )
     return ot.Point([Y])
-
 
 myModel = ot.PythonFunction(d, 1, ModifiedFriedmanModel)
 
@@ -80,30 +78,34 @@ icscream = Icscream(df_penalized=df_penalized,
                     dist_aleatory=dist_aleatory,
                     df_output=dfy)
 
-#------------------#
-# t_0 = tm.time()
-# #icscream.draw_output_sample_analysis()
-# icscream.perform_TSA_study()
-# time_elapsed_sec = tm.time() - t_0
-# print(
-#     ">> Info: Elapsed time for the whole run:",
-#     "{:.6}".format(time_elapsed_sec),
-#     "(sec)",
-# )
-# #------------------#
-# t_0 = tm.time()
-# icscream.perform_CSA_study()
-# time_elapsed_sec = tm.time() - t_0
-# print(
-#     ">> Info: Elapsed time for the whole run:",
-#     "{:.6}".format(time_elapsed_sec),
-#     "(sec)",
-# )
+#%%
+icscream.draw_output_sample_analysis()
+
+#%%
 #------------------#
 t_0 = tm.time()
-
+icscream.perform_TSA_study()
+time_elapsed_sec = tm.time() - t_0
+print(
+    ">> Info: Elapsed time for the whole run:",
+    "{:.6}".format(time_elapsed_sec),
+    "(sec)",
+)
+#%%
+#------------------#
+t_0 = tm.time()
+icscream.perform_CSA_study()
+time_elapsed_sec = tm.time() - t_0
+print(
+    ">> Info: Elapsed time for the whole run:",
+    "{:.6}".format(time_elapsed_sec),
+    "(sec)",
+)
+#------------------#
+#%%
+#------------------#
+t_0 = tm.time()
 results_sa = icscream.draw_sensitivity_results()
-
 time_elapsed_sec = tm.time() - t_0
 print(
     ">> Info: Elapsed time for the whole run:",
@@ -111,17 +113,5 @@ print(
     "(sec)",
 )
 #------------------#
-
-# %%
-t_0 = tm.time()
-
-results_aggreg = icscream.aggregate_pvalues_and_sort_variables()
-
-time_elapsed_sec = tm.time() - t_0
-print(
-    ">> Info: Elapsed time for the whole run:",
-    "{:.6}".format(time_elapsed_sec),
-    "(sec)",
-)
-
-# %%
+#%%
+icscream.save("save_files/modFriedmanfunc_afterHSICstudy.npy")
