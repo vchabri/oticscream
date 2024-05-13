@@ -194,18 +194,16 @@ class Icscream:
 
         self._kriging_trend_basis = None
         self._cov_kriging_model = None
-
         self._x_learn = None
         self._y_learn = None
         self._x_validation = None
         self._y_validation = None
-
         self._scaled_x_data = None
         self._input_kriging_sample = None
         self._output_kriging_sample = None
         self._kriging_result = None
         self._kriging_metamodel = None
-        self._kriging_algo = None
+
         self._validation_results = None
 
         self._sample_X_Tilda = None
@@ -236,6 +234,7 @@ class Icscream:
         attribute_names = self.__dict__.keys() # Get the list of attribute names
         with open(filename, "rb") as f:
             for name in attribute_names:
+                print(name)
                 setattr(self, name, pickle.load(f)) # Load each attribute in the initial order        
 
     def draw_output_sample_analysis(self):
@@ -693,11 +692,11 @@ class Icscream:
 
         bounded_dist_multi = ot.JointDistribution(dist_multi)
 
-        self._kriging_algo.setOptimizationAlgorithm(
+        kriging_algo.setOptimizationAlgorithm(
             ot.MultiStart(
                 ot.NLopt(optimization_algo),
                 ## ot.LHSExperiment(bounded_dist_multi, nsample_multistart).generate(),
-                ot.LowDiscrepancyExperiment(ot.SobolSequence(), bounded_dist_multi, nsample_multistart, True),
+                ot.LowDiscrepancyExperiment(ot.SobolSequence(), bounded_dist_multi, nsample_multistart, True).generate(),
             )
         )
         # kriging_algo.setOptimizationBounds(optim_bounds) ## Hypothesis: data already scaled
@@ -710,7 +709,7 @@ class Icscream:
         # Run the algorithm
         # ---------------------------
         t = tm.time()
-        self._kriging_algo.run()
+        kriging_algo.run()
         elapsed = tm.time() - t
         print(
             ">> Info: Elapsed time for metamodel training:",
@@ -718,15 +717,17 @@ class Icscream:
             "(sec)",
         )
 
-        return self._kriging_algo
+        # Get kriging results and kriging metamodel
+        # ---------------------------
+        self._kriging_result = kriging_algo.getResult()
+        self._kriging_metamodel = self._kriging_result.getMetaModel()
+
+        return kriging_algo
 
     def validate_kriging_metamodel_using_hold_out_sample(self):
 
-        # Get kriging results and kriging metamodel
+        # Get optimized hyperparameters for trend and covariance
         # ---------------------------
-        self._kriging_result = self._kriging_algo.getResult()
-        self._kriging_metamodel = self._kriging_algo.getMetaModel()
-
         result_trend = self._kriging_result.getTrendCoefficients()
         result_covariance_model = self._kriging_result.getCovarianceModel()
 
@@ -762,7 +763,13 @@ class Icscream:
 
         # Histogram of residuals
         # --------------
-        ot.HistogramFactory().build(self._validation_results.getResidualSample()).drawPDF()
+        ### WARNING: the followings should be uncommented as soon as the Issue #2655 is solved. 
+        try:
+            ot.HistogramFactory().build(self._validation_results.getResidualSample()).drawPDF()
+        except RuntimeError:
+            print("ON PASSE ICI")
+            # Force the bin number in order to avoid explosion.
+            ot.HistogramFactory().buildAsHistogram(self._validation_results.getResidualSample(),10).drawPDF()
         graph_histogram_residuals = (
             self._validation_results.getResidualDistribution().drawPDF()
         )
@@ -771,10 +778,12 @@ class Icscream:
 
         # Observed vs. predicted values
         # --------------
-        graph_obs_vs_pred = self._validation_results.drawValidation()
+        graph_obs_vs_pred = self._validation_results.drawValidation().getGraph(0,0)
         graph_obs_vs_pred.setTitle(
             "Obs. vs. Predict -- ($n_{valid}$ = %d)" % self._y_validation.getSize()
         )
+        graph_obs_vs_pred.setXTitle("Observed values")
+        graph_obs_vs_pred.setYTitle("Predicted values")
 
         # QQ-plot
         # --------------
@@ -783,7 +792,7 @@ class Icscream:
         graph_QQ_plot.setYTitle("Predictions")
         graph_QQ_plot.setTitle("Two sample QQ-plot")
 
-        validation_graphs = {"residuals" :    graph_histogram_residuals,
+        validation_graphs = {"residuals" : graph_histogram_residuals,
                              "observed_vs_predicted" : graph_obs_vs_pred,
                              "QQplot" :  graph_QQ_plot
                              }
