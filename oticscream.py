@@ -234,7 +234,6 @@ class Icscream:
         attribute_names = self.__dict__.keys() # Get the list of attribute names
         with open(filename, "rb") as f:
             for name in attribute_names:
-                print(name)
                 setattr(self, name, pickle.load(f)) # Load each attribute in the initial order        
 
     def draw_output_sample_analysis(self):
@@ -830,12 +829,12 @@ class Icscream:
         #     return Q2_score
 
     def construct_and_sample_x_tilda_distribution(
-        self, dist_aleatory, n_sample_X_Tilda=1000, method_compute_m_ebc="AMISE",
+        self, n_sample_X_Tilda=1000, method_compute_m_ebc="AMISE",
     ):
         if self._dist_aleatory is not None:
             # Case #1 - The distribution of X_Tilda is already known 
             # --------------
-            sample_X_aleatory = dist_aleatory.getSample(n_sample_X_Tilda)
+            sample_X_aleatory = self._dist_aleatory.getSample(n_sample_X_Tilda)
             self._sample_X_Tilda = sample_X_aleatory.getMarginal(self._X_Tilda)
         else:
             # Case #2 - The distribution of X_Tilda is not known and should be learnt
@@ -847,12 +846,12 @@ class Icscream:
         return self._sample_X_Tilda
     
     def construct_and_sample_x_penalized_distribution(
-        self, dist_penalized, n_sample_X_penalized=1000, method_compute_m_ebc="AMISE",
+        self, n_sample_X_penalized=1000, method_compute_m_ebc="AMISE",
     ):
-        if self.dist_penalized is not None:
+        if self._dist_penalized is not None:
             # Case #1 - The distribution of X_Penalized is already known 
             # --------------
-            self._sample_X_penalized = dist_penalized.getSample(n_sample_X_penalized)
+            self._sample_X_penalized = self._dist_penalized.getSample(n_sample_X_penalized)
         else:
             # Case #2 - The distribution of X_Penalized is not known and should be learnt
             # --------------
@@ -912,6 +911,17 @@ class Icscream:
         
         return one_dimensional_conditional_mean_function
     
+    def build_1D_conditional_mean_as_PythonFunction(self, varname):
+
+        # Goal: create a ot.PythonFunction from a basic function
+        # --------------
+        basic_function = self.build_1D_conditional_mean(varname)
+        pythonfunction = ot.PythonFunction(1, 1, basic_function)
+        pythonfunction.setInputDescription([varname])
+        pythonfunction.setOutputDescription(["Output Conditional Mean"])
+
+        return pythonfunction
+        
     def compute_2D_conditional_mean(self, varindex1, varindex2, value1, value2):
 
         # Create a new full_sample with two frozen columns 
@@ -949,6 +959,17 @@ class Icscream:
         
         return two_dimensional_conditional_mean_function
     
+    def build_2D_conditional_mean_as_PythonFunction(self, varname1, varname2):
+
+        # Goal: create a ot.PythonFunction from a basic function
+        # --------------
+        basic_function = self.build_2D_conditional_mean(varname1, varname2)
+        pythonfunction = ot.PythonFunction(2, 1, basic_function)
+        pythonfunction.setInputDescription([varname1, varname2])
+        pythonfunction.setOutputDescription(["Output Conditional Mean"])
+
+        return pythonfunction
+    
     def compute_allpenalized_conditional_mean(self, values):
 
         # Create a new full_sample with all frozen columns corresponding to the whole penalized input vector 
@@ -973,6 +994,17 @@ class Icscream:
             return self.compute_allpenalized_conditional_mean(x)
         
         return all_penalized_conditional_mean_function
+    
+    def build_allpenalized_conditional_mean_as_PythonFunction(self):
+
+        # Goal: create a ot.PythonFunction from a basic function
+        # --------------
+        basic_function = self.build_allpenalized_conditional_mean()
+        pythonfunction = ot.PythonFunction(len(self._X_Penalized), 1, basic_function)
+        pythonfunction.setInputDescription(self._X_Penalized)
+        pythonfunction.setOutputDescription(["Output Conditional Mean"])
+
+        return pythonfunction
     
     def compute_conditional_exceedance_probability_from_metamodel(self, full_sample):
 

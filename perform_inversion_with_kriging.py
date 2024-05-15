@@ -30,9 +30,16 @@ icscream_6.load("save_files/save_after_kriging_validation.npy")
 #------------------#
 t_0 = tm.time()
 
-# TODO
-res1 = construct_and_sample_x_tilda_distribution()
-res2 = construct_and_sample_x_penalized_distribution()
+res_X_tilda_given_data = icscream_6.construct_and_sample_x_tilda_distribution()
+# print(res_X_tilda_given_data)
+
+res_X_penalized_given_data  = icscream_6.construct_and_sample_x_penalized_distribution()
+# print(res_X_penalized_given_data)
+
+icscream_6.create_full_sample_for_metamodel_prediction()
+print(icscream_6._full_sample_variable_names)
+print(icscream_6._full_sample)
+print(icscream_6._X_Penalized_indices_within_full_sample)
 
 time_elapsed_sec = tm.time() - t_0
 print(
@@ -42,4 +49,12 @@ print(
 )
 #------------------#
 #%%
-icscream_6.save("save_files/save_after_inversion.npy")
+icscream_6.save("save_files/save_test_X_tilda_X_pen_given_data.npy")
+
+#%%
+from openturns.viewer import View
+
+graph = ot.VisualTest.DrawPairs(res_X_penalized_given_data)
+view = View(graph)
+plt.show()
+
