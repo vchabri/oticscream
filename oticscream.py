@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 #plt.rcParams["text.usetex"] = True
 # from matplotlib import rc, rcParams, stylercParams['text.usetex'] = Truerc('font', **{'family': 'Times'})rc('text', usetex=True)rc('font', size=16)# Set the default text font sizerc('axes', titlesize=20)# Set the axes title font sizerc('axes', labelsize=16)# Set the axes labels font sizerc('xtick', labelsize=14)# Set the font size for x tick labelsrc('ytick', labelsize=16)# Set the font size for y tick labelsrc('legend', fontsize=16)# Set the legend font size`
 import time as tm
-from copy import deepcopy
+from copy import deepcopy ### WARNING:: deepcopy is extremely slow
 import pickle
 
 ot.Log.Show(ot.Log.NONE)
@@ -1049,6 +1049,17 @@ class Icscream:
         
         return one_dimensional_conditional_exceedance_probability
     
+    def build_1D_conditional_exceedance_probability_as_PythonFunction(self, varname):
+
+        # Goal: create a ot.PythonFunction from a basic function
+        # --------------
+        basic_function = self.build_1D_conditional_exceedance_probability(varname)
+        pythonfunction = ot.PythonFunction(1, 1, basic_function)
+        pythonfunction.setInputDescription([varname])
+        pythonfunction.setOutputDescription(["Conditional Exceedance Probability"])
+
+        return pythonfunction
+    
     def compute_2D_conditional_exceedance_probability(self, varindex1, varindex2, value1, value2):
 
         # Create a new full_sample with two frozen columns 
@@ -1080,6 +1091,17 @@ class Icscream:
             return self.compute_2D_conditional_exceedance_probability(varindex1, varindex2, x[0], x[1])
         
         return two_dimensional_conditional_exceedance_probability_function
+    
+    def build_2D_conditional_exceedance_probability_as_PythonFunction(self, varname1, varname2):
+
+        # Goal: create a ot.PythonFunction from a basic function
+        # --------------
+        basic_function = self.build_2D_conditional_exceedance_probability(varname1, varname2)
+        pythonfunction = ot.PythonFunction(2, 1, basic_function)
+        pythonfunction.setInputDescription([varname1, varname2])
+        pythonfunction.setOutputDescription(["Conditional Exceedance Probability"])
+
+        return pythonfunction
 
     def compute_allpenalized_conditional_exceedance_probability(self, values):
 
@@ -1100,6 +1122,17 @@ class Icscream:
             return self.compute_allpenalized_conditional_exceedance_probability(x)
         
         return allpenalized_conditional_exceedance_probability_function
+    
+    def build_allpenalized_conditional_exceedance_probability_as_PythonFunction(self):
+
+        # Goal: create a ot.PythonFunction from a basic function
+        # --------------
+        basic_function = self.build_allpenalized_conditional_exceedance_probability()
+        pythonfunction = ot.PythonFunction(len(self._X_Penalized), 1, basic_function)
+        pythonfunction.setInputDescription(self._X_Penalized)
+        pythonfunction.setOutputDescription(["Conditional Exceedance Probability"])
+
+        return pythonfunction
 
     def create_full_sample_for_metamodel_prediction(self):
         
