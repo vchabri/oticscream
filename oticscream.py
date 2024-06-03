@@ -7,8 +7,8 @@ Copyright (C) EDF 2024
 """
 import os
 
-work_path = "/home/g44079/Documents/01_PROJETS/THCOEURS/oticscream/oticscream"
-os.chdir(work_path)
+# work_path = "/home/g44079/Documents/01_PROJETS/THCOEURS/oticscream/oticscream"
+# os.chdir(work_path)
 
 import numpy as np
 import openturns as ot
@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 #plt.rcParams["text.usetex"] = True
 # from matplotlib import rc, rcParams, stylercParams['text.usetex'] = Truerc('font', **{'family': 'Times'})rc('text', usetex=True)rc('font', size=16)# Set the default text font sizerc('axes', titlesize=20)# Set the axes title font sizerc('axes', labelsize=16)# Set the axes labels font sizerc('xtick', labelsize=14)# Set the font size for x tick labelsrc('ytick', labelsize=16)# Set the font size for y tick labelsrc('legend', fontsize=16)# Set the legend font size`
 import time as tm
-from copy import deepcopy ### WARNING:: deepcopy is extremely slow
 import pickle
 
 ot.Log.Show(ot.Log.NONE)
@@ -887,7 +886,7 @@ class Icscream:
         # --------------
         ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
         ## WARNING: this method assumes that the frozen variable is mutually independent from the others. This might be a limitation if the variables are dependent.
-        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column = ot.Sample(self._full_sample)
         full_sample_frozen_column[:,varindex] = [[value]]*full_sample_frozen_column.getSize()
 
         # Apply the predictor to compute 1D conditional mean 
@@ -928,7 +927,7 @@ class Icscream:
         # --------------
         ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
         ## WARNING: this method assumes that the frozen variables are mutually independent from the others. This might be a limitation if the variables are dependent.
-        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column = ot.Sample(self._full_sample)
         full_sample_frozen_column[:,varindex1] = [[value1]]*full_sample_frozen_column.getSize()
         full_sample_frozen_column[:,varindex2] = [[value2]]*full_sample_frozen_column.getSize()
 
@@ -974,7 +973,7 @@ class Icscream:
 
         # Create a new full_sample with all frozen columns corresponding to the whole penalized input vector 
         # --------------
-        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column = ot.Sample(self._full_sample)
         penalized_sample_columns = ot.Sample(full_sample_frozen_column.getSize(), values)
         full_sample_frozen_column[:,self._X_Penalized_indices_within_full_sample] = penalized_sample_columns
 
@@ -1030,7 +1029,7 @@ class Icscream:
         # --------------
         ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
         ## WARNING: this method assumes that the frozen variable is mutually independent from the others. This might be a limitation if the variables are dependent.
-        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column = ot.Sample(self._full_sample)
         full_sample_frozen_column[:,varindex] = [[value]]*full_sample_frozen_column.getSize()
 
         return self.compute_conditional_exceedance_probability_from_metamodel(full_sample_frozen_column)
@@ -1066,7 +1065,7 @@ class Icscream:
         # --------------
         ## WARNING: here, it is supposed that this method uses the index of the considered conditioning variable instead of its name.
         ## WARNING: this method assumes that the frozen variables are mutually independent from the others. This might be a limitation if the variables are dependent.
-        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column = ot.Sample(self._full_sample)
         full_sample_frozen_column[:,varindex1] = [[value1]]*full_sample_frozen_column.getSize()
         full_sample_frozen_column[:,varindex2] = [[value2]]*full_sample_frozen_column.getSize()
 
@@ -1107,7 +1106,7 @@ class Icscream:
 
         # Create a new full_sample with all frozen columns corresponding to the whole penalized input vector 
         # --------------
-        full_sample_frozen_column = deepcopy(self._full_sample)
+        full_sample_frozen_column = ot.Sample(self._full_sample)
         penalized_sample_columns = ot.Sample(full_sample_frozen_column.getSize(), values)
         full_sample_frozen_column[:,self._X_Penalized_indices_within_full_sample] = penalized_sample_columns
 

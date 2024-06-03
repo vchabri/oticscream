@@ -10,7 +10,6 @@ Copyright (C) EDF 2024
 import openturns as ot
 from oticscream import Icscream
 from openturns.viewer import View
-from copy import deepcopy
 
 # %%
 input_dimension = 20
@@ -44,21 +43,60 @@ input_sample = input_randomvector.getSample(n_sample_reference)
 output_sample = modifiedFriedman(input_sample)
 
 output_mean = output_sample.computeMean()
-#print(output_mean)
+print(output_mean)
 
-#frozenX1_function = ot.ParametricFunction(modifiedFriedman,[0],[0.5])
+class ConditionalMeanReference(ot.OpenTURNSPythonFunction):
+    def __init__(self, index):
+        super().__init__(1, 1)
+        super().setInputDescription(["X{}".format(index+1)])
+        super().setOutputDescription(["Y"])
+        self._index = index
 
-def conditional_mean_reference_X1(x):
-    xx = deepcopy(input_sample) #### WARNING ::: EXTREMELY SLOOOOWWWW (Idea: use np. vstack / hstack instead)
-    xx[:,0] = ot.Sample(xx.getSize(),x)
+    def _exec(self, x):
+        xx = ot.Sample(input_sample)
+        xx[:, self._index] = ot.Sample(xx.getSize(),x)
+        return modifiedFriedman(xx).computeMean()
 
-    return modifiedFriedman(xx).computeMean()
-
-conditional_mean_ref_X1_PF = ot.PythonFunction(1,1, conditional_mean_reference_X1)
-
-# print(conditional_mean_reference_X1([0.4]))
-
-# conditional_mean_ref_X1_PF.draw(0.0,1.0)
+conditional_mean_ref_X1 = ot.Function(ConditionalMeanReference(0))
+conditional_mean_ref_X2 = ot.Function(ConditionalMeanReference(1))
+conditional_mean_ref_X3 = ot.Function(ConditionalMeanReference(2))
+conditional_mean_ref_X4 = ot.Function(ConditionalMeanReference(3))
+conditional_mean_ref_X5 = ot.Function(ConditionalMeanReference(4))
 
 
+# %%
+graph = conditional_mean_ref_X1.draw(0.0,1.0)
+line_X1 = graph.getDrawable(0)
+
+# %%
+graph = conditional_mean_ref_X2.draw(0.0,1.0)
+line_X2 = graph.getDrawable(0)
+
+
+# %%
+graph = conditional_mean_ref_X3.draw(0.0,1.0)
+line_X3 = graph.getDrawable(0)
+
+
+# %%
+graph = conditional_mean_ref_X3.draw(0.0,1.0)
+line_X3 = graph.getDrawable(0)
+
+# %%
+graph = conditional_mean_ref_X4.draw(0.0,1.0)
+line_X4 = graph.getDrawable(0)
+
+# %%
+graph = conditional_mean_ref_X5.draw(0.0,1.0)
+line_X5 = graph.getDrawable(0)
+
+
+# %%
+graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
+graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
+graph.setLegendPosition("bottomright")
+graph.setTitle("")
+graph.setXTitle("")
+# %%
+View(graph)
 # %%
