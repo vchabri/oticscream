@@ -115,3 +115,5 @@ print(
 #------------------#
 #%%
 icscream.save("save_files/modFriedmanfunc_afterHSICstudy.npy")
+
+# %%
