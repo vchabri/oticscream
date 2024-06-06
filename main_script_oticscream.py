@@ -56,10 +56,11 @@ input_sample.setDescription(variable_names)
 output_sample = myModel(input_sample)
 output_sample.setDescription(["Y"])
 
-scaler = StandardScaler()
-transformed_input_sample = scaler.fit_transform(input_sample)
+# scaler = StandardScaler()
+# transformed_input_sample = scaler.fit_transform(input_sample)
 
-dfx = pd.DataFrame(transformed_input_sample)
+#dfx = pd.DataFrame(transformed_input_sample)
+dfx = pd.DataFrame(np.array(input_sample))
 dfx.columns = list(input_sample.getDescription())
 dfy = output_sample.asDataFrame()
 

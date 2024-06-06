@@ -35,6 +35,8 @@ ot.RandomGenerator.SetSeed(0)
 
 distribution_list = [ot.Uniform(0.0, 1.0) for i in range(input_dimension)]
 input_distribution = ot.JointDistribution(distribution_list)
+input_description = ["X{}".format(i) for i in range(1, input_distribution.getDimension() + 1)]
+input_distribution.setDescription(input_description)
 
 input_randomvector = ot.RandomVector(input_distribution)
 # output_randomvector = ot.CompositeRandomVector(modifiedFriedman,input_randomvector)
@@ -43,7 +45,7 @@ n_sample_reference = 10**6
 input_sample = input_randomvector.getSample(n_sample_reference)
 output_sample = modifiedFriedman(input_sample)
 
-output_mean = output_sample.computeMean()
+output_mean = output_sample.computeMean()[0]
 print(output_mean)
 
 
@@ -67,41 +69,41 @@ conditional_mean_ref_X4 = ot.Function(ConditionalMeanReference(3))
 conditional_mean_ref_X5 = ot.Function(ConditionalMeanReference(4))
 
 
-# %%
-graph = conditional_mean_ref_X1.draw(0.0, 1.0)
-line_X1 = graph.getDrawable(0)
+# # %%
+# graph = conditional_mean_ref_X1.draw(0.0, 1.0)
+# line_X1 = graph.getDrawable(0)
 
-# %%
-graph = conditional_mean_ref_X2.draw(0.0, 1.0)
-line_X2 = graph.getDrawable(0)
-
-
-# %%
-graph = conditional_mean_ref_X3.draw(0.0, 1.0)
-line_X3 = graph.getDrawable(0)
+# # %%
+# graph = conditional_mean_ref_X2.draw(0.0, 1.0)
+# line_X2 = graph.getDrawable(0)
 
 
-# %%
-graph = conditional_mean_ref_X3.draw(0.0, 1.0)
-line_X3 = graph.getDrawable(0)
-
-# %%
-graph = conditional_mean_ref_X4.draw(0.0, 1.0)
-line_X4 = graph.getDrawable(0)
-
-# %%
-graph = conditional_mean_ref_X5.draw(0.0, 1.0)
-line_X5 = graph.getDrawable(0)
+# # %%
+# graph = conditional_mean_ref_X3.draw(0.0, 1.0)
+# line_X3 = graph.getDrawable(0)
 
 
-# %%
-graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
-graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
-graph.setLegendPosition("bottomright")
-graph.setTitle("")
-graph.setXTitle("")
-# %%
-View(graph)
+# # %%
+# graph = conditional_mean_ref_X3.draw(0.0, 1.0)
+# line_X3 = graph.getDrawable(0)
+
+# # %%
+# graph = conditional_mean_ref_X4.draw(0.0, 1.0)
+# line_X4 = graph.getDrawable(0)
+
+# # %%
+# graph = conditional_mean_ref_X5.draw(0.0, 1.0)
+# line_X5 = graph.getDrawable(0)
+
+
+# # %%
+# graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
+# graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
+# graph.setLegendPosition("bottomright")
+# graph.setTitle("")
+# graph.setXTitle("")
+# # %%
+# View(graph)
 
 
 # %%
@@ -126,35 +128,35 @@ conditional_proba_ref_X3 = ot.Function(ConditionalExceedanceProbability(2))
 conditional_proba_ref_X4 = ot.Function(ConditionalExceedanceProbability(3))
 conditional_proba_ref_X5 = ot.Function(ConditionalExceedanceProbability(4))
 
-# %%
-graph = conditional_proba_ref_X1.draw(0.0, 1.0)
-line_X1 = graph.getDrawable(0)
+# # %%
+# graph = conditional_proba_ref_X1.draw(0.0, 1.0)
+# line_X1 = graph.getDrawable(0)
 
-# %%
-graph = conditional_proba_ref_X2.draw(0.0, 1.0)
-line_X2 = graph.getDrawable(0)
-
-
-# %%
-graph = conditional_proba_ref_X3.draw(0.0, 1.0)
-line_X3 = graph.getDrawable(0)
+# # %%
+# graph = conditional_proba_ref_X2.draw(0.0, 1.0)
+# line_X2 = graph.getDrawable(0)
 
 
-# %%
-graph = conditional_proba_ref_X3.draw(0.0, 1.0)
-line_X3 = graph.getDrawable(0)
+# # %%
+# graph = conditional_proba_ref_X3.draw(0.0, 1.0)
+# line_X3 = graph.getDrawable(0)
 
-# %%
-graph = conditional_proba_ref_X4.draw(0.0, 1.0)
-line_X4 = graph.getDrawable(0)
 
-# %%
-graph = conditional_proba_ref_X5.draw(0.0, 1.0)
-line_X5 = graph.getDrawable(0)
-# %%
-graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
-graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
-graph.setLegendPosition("bottomright")
-graph.setTitle("")
-graph.setXTitle("")
-# %%
+# # %%
+# graph = conditional_proba_ref_X3.draw(0.0, 1.0)
+# line_X3 = graph.getDrawable(0)
+
+# # %%
+# graph = conditional_proba_ref_X4.draw(0.0, 1.0)
+# line_X4 = graph.getDrawable(0)
+
+# # %%
+# graph = conditional_proba_ref_X5.draw(0.0, 1.0)
+# line_X5 = graph.getDrawable(0)
+# # %%
+# graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
+# graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
+# graph.setLegendPosition("bottomright")
+# graph.setTitle("")
+# graph.setXTitle("")
+# # %%

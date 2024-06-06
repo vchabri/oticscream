@@ -585,11 +585,14 @@ class Icscream:
 
         # Covariance model for the secondary influential inputs
         # ---------------------------
-        cov_X_Secondary_Influential_Inputs = ot.IsotropicCovarianceModel(marginal_cov_model, len(self._X_Secondary_Influential_Inputs_after_aggregation))
+        if not len(self._X_Secondary_Influential_Inputs_after_aggregation): # no secondary influential variables
+            self._cov_kriging_model = cov_X_Explanatory
+        else:
+            cov_X_Secondary_Influential_Inputs = ot.IsotropicCovarianceModel(marginal_cov_model, len(self._X_Secondary_Influential_Inputs_after_aggregation))
 
         # Resulting covariance model
         # ---------------------------
-        self._cov_kriging_model = ot.ProductCovarianceModel([cov_X_Explanatory, cov_X_Secondary_Influential_Inputs])
+            self._cov_kriging_model = ot.ProductCovarianceModel([cov_X_Explanatory, cov_X_Secondary_Influential_Inputs])
 
         # Activate nugget factor for optimization of the homoscedastic nugget effect
         # ---------------------------
@@ -879,6 +882,9 @@ class Icscream:
         joint_distribution = ot.JointDistribution(list_marginals, fitted_ebc)
 
         return joint_distribution
+
+    def compute_mean(self):
+        return self._kriging_metamodel(self._full_sample).computeMean()[0]
     
     def compute_1D_conditional_mean(self, varindex, value):
 
@@ -1022,6 +1028,9 @@ class Icscream:
         exceedance_probability = integrand.computeMean()
 
         return exceedance_probability
+
+    def compute_exceedance_probability(self):
+        return self.compute_conditional_exceedance_probability_from_metamodel(self._full_sample)[0]
 
     def compute_1D_conditional_exceedance_probability(self, varindex, value):
 
