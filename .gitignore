@@ -2,3 +2,13 @@
 *.xls
 *.xlsx
 *.csv
+*.egg-info
+build/*
+*.png
+*.pdf
+dist/*
+*/__pycache__
+*/install
+*/auto_examples
+sg_execution_times.rst
+*_generated

@@ -1,6 +1,6 @@
-# Project Title
+# OTICSCREAM
 
-One Paragraph of project description goes here
+An OpenTURNS implementation of the ICSCREAM methodology.
 
 ## Getting Started
 
@@ -8,29 +8,24 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-What things you need to install the software and how to install them
-
-```
-Give examples
-```
+- OpenTURNS
 
 ### Installing
 
-A step by step series of examples that tell you how to get a development env running
-
-Say what the step will be
+In the root folder, run:
 
 ```
-Give the example
+pip install .
 ```
 
-And repeat
+### Build the documentation
+
+To build the sphinx documentation, run the following command
+in the root folder:
 
 ```
-until finished
+sphinx-build -j auto doc doc/install
 ```
-
-End with an example of getting some data out of the system or using it for a little demo
 
 ## Running the tests
 

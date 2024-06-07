@@ -1,0 +1,25 @@
+.toggle .header {
+    display: block;
+    clear: both;
+    cursor: pointer;
+}
+
+
+.toggle .header:after {
+    content: " ▼";
+}
+
+.toggle .header.open:after {
+    content: " ▲";
+}
+
+/* hide the top link */
+div.sphx-glr-download-link-note {
+    height: 0px;
+    visibility: hidden;
+  }
+
+/* Remove big whitespace to solve #1642 */
+ pre, div[class*="highlight-"] {
+    clear: left;
+}
