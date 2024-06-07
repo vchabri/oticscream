@@ -13,6 +13,8 @@ from openturns.viewer import View
 import numpy as np
 
 # %%
+# Define the modified Friedman function
+
 input_dimension = 20
 inputs = ["X" + str(x) for x in range(1, input_dimension + 1)]
 output = ["Y"]
@@ -29,24 +31,30 @@ modifiedFriedman = ot.SymbolicFunction(inputs, output, formula)
 X = [0.0] * input_dimension
 print(modifiedFriedman(X))
 
-# %% Compute reference 1D mean effects
+# %%
+# Generate the input and output samples
 
 ot.RandomGenerator.SetSeed(0)
 
 distribution_list = [ot.Uniform(0.0, 1.0) for i in range(input_dimension)]
 input_distribution = ot.JointDistribution(distribution_list)
-input_description = ["X{}".format(i) for i in range(1, input_distribution.getDimension() + 1)]
+input_description = [
+    "X{}".format(i) for i in range(1, input_distribution.getDimension() + 1)
+]
 input_distribution.setDescription(input_description)
 
 input_randomvector = ot.RandomVector(input_distribution)
 # output_randomvector = ot.CompositeRandomVector(modifiedFriedman,input_randomvector)
 
-n_sample_reference = 10**6
+n_sample_reference = 10 ** 6
 input_sample = input_randomvector.getSample(n_sample_reference)
 output_sample = modifiedFriedman(input_sample)
 
 output_mean = output_sample.computeMean()[0]
 print(output_mean)
+
+
+# %% Compute reference 1D mean effects
 
 
 class ConditionalMeanReference(ot.OpenTURNSPythonFunction):
@@ -68,45 +76,23 @@ conditional_mean_ref_X3 = ot.Function(ConditionalMeanReference(2))
 conditional_mean_ref_X4 = ot.Function(ConditionalMeanReference(3))
 conditional_mean_ref_X5 = ot.Function(ConditionalMeanReference(4))
 
-
-# # %%
-# graph = conditional_mean_ref_X1.draw(0.0, 1.0)
-# line_X1 = graph.getDrawable(0)
-
-# # %%
-# graph = conditional_mean_ref_X2.draw(0.0, 1.0)
-# line_X2 = graph.getDrawable(0)
+# %%
+# Compute reference mean effect wrt all 5 penalized input variables
 
 
-# # %%
-# graph = conditional_mean_ref_X3.draw(0.0, 1.0)
-# line_X3 = graph.getDrawable(0)
+def conditional_mean_ref_penalized(X):
+    xx = ot.Sample(input_sample)
+    xx[:, 0:5] = ot.Sample(xx.getSize(), X)
+    return modifiedFriedman(xx).computeMean()
 
 
-# # %%
-# graph = conditional_mean_ref_X3.draw(0.0, 1.0)
-# line_X3 = graph.getDrawable(0)
-
-# # %%
-# graph = conditional_mean_ref_X4.draw(0.0, 1.0)
-# line_X4 = graph.getDrawable(0)
-
-# # %%
-# graph = conditional_mean_ref_X5.draw(0.0, 1.0)
-# line_X5 = graph.getDrawable(0)
-
-
-# # %%
-# graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
-# graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
-# graph.setLegendPosition("bottomright")
-# graph.setTitle("")
-# graph.setXTitle("")
-# # %%
-# View(graph)
+conditional_mean_ref_penalized = ot.PythonFunction(5, 1, conditional_mean_ref_penalized)
 
 
 # %%
+# Compute reference exceedance probability with one fixed input variable
+
+
 class ConditionalExceedanceProbability(ot.OpenTURNSPythonFunction):
     def __init__(self, index, quantile=0.9):
         super().__init__(1, 1)
@@ -128,35 +114,24 @@ conditional_proba_ref_X3 = ot.Function(ConditionalExceedanceProbability(2))
 conditional_proba_ref_X4 = ot.Function(ConditionalExceedanceProbability(3))
 conditional_proba_ref_X5 = ot.Function(ConditionalExceedanceProbability(4))
 
-# # %%
-# graph = conditional_proba_ref_X1.draw(0.0, 1.0)
-# line_X1 = graph.getDrawable(0)
 
-# # %%
-# graph = conditional_proba_ref_X2.draw(0.0, 1.0)
-# line_X2 = graph.getDrawable(0)
+# %% BUILD ALL PENALIZED 2D COND EXCEEDANCE PROBABILITY
 
 
-# # %%
-# graph = conditional_proba_ref_X3.draw(0.0, 1.0)
-# line_X3 = graph.getDrawable(0)
+class ConditionalExceedanceProbability2D(ot.OpenTURNSPythonFunction):
+    def __init__(self, index1, index2, quantile=0.9):
+        super().__init__(2, 1)
+        super().setInputDescription(["X%i" % (index1 + 1), "X%i" % (index2 + 1)])
+        super().setOutputDescription(["Y"])
+        self._index1 = index1
+        self._index2 = index2
+        self._threshold = output_sample.computeQuantile(quantile)[0]
+
+    def _exec(self, x):
+        xx = ot.Sample(input_sample)
+        xx[:, [self._index1, self._index2]] = ot.Sample(xx.getSize(), x)
+        outputs = np.array(modifiedFriedman(xx))
+        return ot.Point(1, np.mean(outputs > self._threshold))
 
 
-# # %%
-# graph = conditional_proba_ref_X3.draw(0.0, 1.0)
-# line_X3 = graph.getDrawable(0)
-
-# # %%
-# graph = conditional_proba_ref_X4.draw(0.0, 1.0)
-# line_X4 = graph.getDrawable(0)
-
-# # %%
-# graph = conditional_proba_ref_X5.draw(0.0, 1.0)
-# line_X5 = graph.getDrawable(0)
-# # %%
-# graph.setDrawables([line_X1, line_X2, line_X3, line_X4, line_X5])
-# graph.setLegends(["X1", "X2", "X3", "X4", "X5"])
-# graph.setLegendPosition("bottomright")
-# graph.setTitle("")
-# graph.setXTitle("")
-# # %%
+conditional_proba_ref_X1_X2 = ot.Function(ConditionalExceedanceProbability2D(0, 1))

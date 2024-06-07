@@ -86,13 +86,18 @@ graph.add(ot.Curve([low, 1.0], [low, 1.0]))
 graph.setLegendPosition("topleft")
 graph.setLegends(["coverage", ""])  # %%
 View(graph)
+
 # %%
+# Use ICSCREAM to build the 1D conditional means from the GP
+
 condmean_X1 = icscream_7.build_1D_conditional_mean_as_PythonFunction("X1")
 condmean_X2 = icscream_7.build_1D_conditional_mean_as_PythonFunction("X2")
 condmean_X3 = icscream_7.build_1D_conditional_mean_as_PythonFunction("X3")
 condmean_X4 = icscream_7.build_1D_conditional_mean_as_PythonFunction("X4")
 condmean_X5 = icscream_7.build_1D_conditional_mean_as_PythonFunction("X5")
 # %%
+# 1D conditional means from the GP
+
 graph = condmean_X1.draw(0.0, 1.0, 100)
 graph.add(condmean_X2.draw(0.0, 1.0, 100))
 graph.add(condmean_X3.draw(0.0, 1.0, 100))
@@ -108,9 +113,10 @@ graph.setTitle("GP conditional mean")
 graph.setXTitle("Input value")
 v = View(graph)
 v.save("figures/Conditional_mean_GP.pdf")
-# %%
 
 # %%
+# 1D conditional means from the reference function
+
 graph_analytical = fr.conditional_mean_ref_X1.draw(0.0, 1.0)
 graph_analytical.add(fr.conditional_mean_ref_X2.draw(0.0, 1.0))
 graph_analytical.add(fr.conditional_mean_ref_X3.draw(0.0, 1.0))
@@ -126,6 +132,8 @@ graph_analytical.setXTitle("Input value")
 v = View(graph_analytical)
 v.save("figures/Conditional_mean_Analytical.pdf")
 # %%
+# Overlay 1D conditional means from the reference function and the GP
+
 for num, line in enumerate(graph.getDrawables()):
     line.setLineStyle("dashed")
     graph.setDrawable(line, num)
@@ -139,6 +147,7 @@ v = View(graph_analytical)
 v.save("figures/Conditional_mean_GPvsAnalytical.pdf")
 
 # %%
+# Use ICSCREAM to build the 1D conditional exceedance probabilities from the GP
 
 condprob_X1 = icscream_7.build_1D_conditional_exceedance_probability_as_PythonFunction(
     "X1"
@@ -157,6 +166,8 @@ condprob_X5 = icscream_7.build_1D_conditional_exceedance_probability_as_PythonFu
 )
 
 # %%
+# 1D conditional exceednance probabilities from the GP
+
 graph_proba = condprob_X1.draw(0.0, 1.0, 100)
 graph_proba.add(condprob_X2.draw(0.0, 1.0, 100))
 graph_proba.add(condprob_X3.draw(0.0, 1.0, 100))
@@ -173,6 +184,8 @@ graph_proba.setXTitle("Input value")
 v = View(graph_proba)
 v.save("figures/Conditional_proba_GP.pdf")
 # %%
+# 1D conditional exceednance probabilities from the reference function
+
 graph_proba_analytical = fr.conditional_proba_ref_X1.draw(0.0, 1.0)
 graph_proba_analytical.add(fr.conditional_proba_ref_X2.draw(0.0, 1.0))
 graph_proba_analytical.add(fr.conditional_proba_ref_X3.draw(0.0, 1.0))
@@ -190,6 +203,9 @@ v = View(graph_proba_analytical)
 v.save("figures/Conditional_proba_Analytical.pdf")
 
 # %%
+# Overlay 1D conditional exceednance probabilities
+# from the reference function and the GP
+
 for num, line in enumerate(graph_proba.getDrawables()):
     line.setLineStyle("dashed")
     line.setColor(line.getColor())
@@ -199,4 +215,128 @@ graph_proba_analytical.setTitle("Analytical vs GP conditional exceedance probabi
 v = View(graph_proba_analytical)
 v.save("figures/Conditional_proba_GPvsAnalytical.pdf")
 
+
 # %%
+# REFERENCE FUNCTION CONDITIONAL EXCEEDANCE PROBABILITY wrt 2 FIXED INPUTS
+
+ot.ResourceMap.SetAsBool("Contour-DefaultIsFilled", True)
+ot.ResourceMap.SetAsUnsignedInteger("Contour-DefaultLevelsNumber", 20)
+
+dim = 5
+
+lowerBound = ot.Point(dim, 0.0)
+upperBound = ot.Point(dim, 1.0)
+
+vmin = np.inf
+vmax = -np.inf
+
+grid = ot.GridLayout(dim - 1, dim - 1)
+grid.setTitle("Modified Friedman exceedance probability with 2 fixed input variables")
+for i in range(1, dim):
+    for j in range(i):
+        # Definition of 2D conditional mean function
+        crossCutFunction = ot.Function(fr.ConditionalExceedanceProbability2D(i, j))
+        crossCutLowerBound = [lowerBound[j], lowerBound[i]]
+        crossCutUpperBound = [upperBound[j], upperBound[i]]
+
+        # Get and customize the contour ploticscream_7._X_Penalized[i]
+        graph = crossCutFunction.draw(crossCutLowerBound, crossCutUpperBound, [5, 5])
+        graph.setTitle("")
+        contour = graph.getDrawable(0).getImplementation()
+        vmin = min(vmin, contour.getData().getMin()[0])
+        vmax = max(vmax, contour.getData().getMax()[0])
+        contour.setColorBarPosition("")  # suppress colorbar of each plot
+        contour.setColorMap("viridis")
+        graph.setDrawable(contour, 0)
+        graph.setXTitle("")
+        graph.setYTitle("")
+        graph.setTickLocation(ot.GraphImplementation.TICKNONE)
+        graph.setGrid(False)
+
+        # Creation of axes title
+        if j == 0:
+            graph.setYTitle("X%i" % (i + 1))
+        if i == dim - 1:
+            graph.setXTitle("X%i" % (j + 1))
+
+        grid.setGraph(i - 1, j, graph)
+
+for i in range(1, dim):
+    for j in range(i):
+        graph = grid.getGraph(i - 1, j)
+        contour = graph.getDrawable(0).getImplementation()
+        contour.setVmin(vmin)
+        contour.setVmax(vmax)
+        graph.setDrawable(contour, 0)
+        grid.setGraph(i - 1, j, graph)
+
+# Get View object to manipulate the underlying figure
+v = View(grid)
+fig = v.getFigure()
+fig.set_size_inches(12, 12)  # reduce the size
+
+
+# Setup a large colorbar
+axes = v.getAxes()
+colorbar = fig.colorbar(
+    v.getSubviews()[2][2].getContourSets()[0], ax=axes[:, -1], fraction=0.1
+)
+
+fig.subplots_adjust(top=1.0, bottom=0.0, left=0.0, right=1.0)
+fig.savefig("Friedman_exceedance_proba_2fixed.pdf")
+
+# %%
+# OPTIMIZATION
+
+# %%
+# Optimize the conditional mean wrt all penalized variables
+# i.e. X1, X2, X3, X4, X5
+
+mean_GP_conditional_to_penalized = (
+    icscream_7.build_allpenalized_conditional_mean_as_PythonFunction()
+)
+# %%
+problem = ot.OptimizationProblem(mean_GP_conditional_to_penalized)
+problem.setMinimization(False)
+bounds = ot.Interval([0.0] * 5, [1.0] * 5)
+problem.setBounds(bounds)
+optim = ot.NLopt("LN_COBYLA")
+optim.setProblem(problem)
+
+bounded_dist_multi = ot.JointDistribution([ot.Uniform(0.0, 1.0)] * 5)
+start = ot.LowDiscrepancyExperiment(
+    ot.SobolSequence(), bounded_dist_multi, 10, True
+).generate()
+
+multistart = ot.MultiStart(optim, start)
+# %%
+multistart.run()
+res = multistart.getResult()
+print(res.getOptimalPoint())
+
+# %%
+# Optimize the exceedance probability wrt all penalized variables
+# i.e. X1, X2, X3, X4, X5
+
+mean_GP_proba_to_penalized = (
+    icscream_7.build_allpenalized_conditional_exceedance_probability_as_PythonFunction()
+)
+# %%
+problem_proba = ot.OptimizationProblem(mean_GP_proba_to_penalized)
+problem_proba.setMinimization(False)
+bounds = ot.Interval([0.0] * 5, [1.0] * 5)
+problem_proba.setBounds(bounds)
+optim_proba = ot.NLopt("LN_COBYLA")
+optim_proba.setProblem(problem_proba)
+
+bounded_dist_multi = ot.JointDistribution([ot.Uniform(0.0, 1.0)] * 5)
+start = ot.LowDiscrepancyExperiment(
+    ot.SobolSequence(), bounded_dist_multi, 10, True
+).generate()
+
+multistart_proba = ot.MultiStart(optim_proba, start)
+
+# %%
+multistart_proba.run()
+res_proba = multistart_proba.getResult()
+print(res_proba.getOptimalPoint())
