@@ -683,7 +683,7 @@ class Icscream:
 
         # Build the learn and validation indices
         learn_indices = greedy_sp_indices[0:-validation_size]
-        validation_indices = greedy_sp_indices[validation_size:]
+        validation_indices = greedy_sp_indices[len(learn_indices) :]
 
         # Build the learn and validation samples
         self._x_learn = self._x_data[learn_indices]
