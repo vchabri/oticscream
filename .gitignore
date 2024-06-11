@@ -4,7 +4,6 @@
 *.csv
 *.egg-info
 build/*
-*.png
 *.pdf
 dist/*
 */__pycache__
