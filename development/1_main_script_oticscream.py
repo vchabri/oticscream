@@ -20,6 +20,7 @@ from oticscream import Icscream
 ot.RandomGenerator.SetSeed(0)
 
 d_penalized = 5
+
 d_aleatory = 15
 d = d_aleatory + d_penalized
 
@@ -121,5 +122,5 @@ print(icscream._X_Secondary_Influential_Inputs)
 interesting = input_sample.getMarginal(icscream._X_Primary_Influential_Inputs)
 interesting = ot.Sample(np.hstack((interesting, output_sample.rank())))
 interesting.setDescription(icscream._X_Primary_Influential_Inputs + ["Y"])
-ot.VisualTest.DrawPairs(interesting)
+# ot.VisualTest.DrawPairs(interesting)
 # %%
