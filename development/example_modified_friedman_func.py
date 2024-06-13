@@ -34,8 +34,6 @@ print(modifiedFriedman(X))
 # %%
 # Generate the input and output samples
 
-ot.RandomGenerator.SetSeed(0)
-
 distribution_list = [ot.Uniform(0.0, 1.0) for i in range(input_dimension)]
 input_distribution = ot.JointDistribution(distribution_list)
 input_description = [

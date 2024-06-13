@@ -13,11 +13,12 @@ import time as tm
 from sklearn.preprocessing import StandardScaler
 import openturns as ot
 from oticscream import Icscream
+from example_modified_friedman_func import modifiedFriedman
 
 # %%
 # Modified Friedman function (ref Marrel et al. 2021)
 # ---------------------------
-ot.RandomGenerator.SetSeed(0)
+ot.RandomGenerator.SetSeed(1)
 
 d_penalized = 5
 
@@ -26,8 +27,6 @@ d = d_aleatory + d_penalized
 
 distributionList = [ot.Uniform(0.0, 1.0) for i in range(d)]
 myDistribution = ot.JointDistribution(distributionList)
-
-from example_modified_friedman_func import modifiedFriedman
 
 variable_names = ["X" + str(x) for x in range(1, d + 1)]
 
