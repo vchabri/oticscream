@@ -232,8 +232,8 @@ vmax = -np.inf
 
 grid = ot.GridLayout(dim - 1, dim - 1)
 grid.setTitle("Modified Friedman exceedance probability with 2 fixed input variables")
-for i in range(1, dim):
-    for j in range(i):
+for i in range(1, dim): # i = 1,2,3,4
+    for j in range(i):  # j = 0,...,i-1
         # Definition of 2D conditional mean function
         crossCutFunction = ot.Function(fr.ConditionalExceedanceProbability2D(i, j))
         crossCutLowerBound = [lowerBound[j], lowerBound[i]]
@@ -248,16 +248,16 @@ for i in range(1, dim):
         contour.setColorBarPosition("")  # suppress colorbar of each plot
         contour.setColorMap("viridis")
         graph.setDrawable(contour, 0)
-        graph.setXTitle("")
-        graph.setYTitle("")
+        # graph.setXTitle("")
+        # graph.setYTitle("")
         graph.setTickLocation(ot.GraphImplementation.TICKNONE)
         graph.setGrid(False)
 
-        # Creation of axes title
-        if j == 0:
-            graph.setYTitle("X%i" % (i + 1))
-        if i == dim - 1:
-            graph.setXTitle("X%i" % (j + 1))
+        # # Creation of axes title
+        # if j == 0:
+        #     graph.setYTitle("X%i" % (i + 1))
+        # if i == dim - 1:
+        #     graph.setXTitle("X%i" % (j + 1))
 
         grid.setGraph(i - 1, j, graph)
 
@@ -340,3 +340,74 @@ multistart_proba = ot.MultiStart(optim_proba, start)
 multistart_proba.run()
 res_proba = multistart_proba.getResult()
 print(res_proba.getOptimalPoint())
+
+# %%
+# build_2D_conditional_exceedance_probability
+
+ot.ResourceMap.SetAsBool("Contour-DefaultIsFilled", True)
+ot.ResourceMap.SetAsUnsignedInteger("Contour-DefaultLevelsNumber", 20)
+
+dim = len(icscream_7._X_Penalized)
+
+lowerBound = ot.Point(dim, 0.0)
+upperBound = ot.Point(dim, 1.0)
+
+vmin = np.inf
+vmax = -np.inf
+
+grid = ot.GridLayout(dim - 1, dim - 1)
+grid.setTitle("GP exceedance probability with 2 fixed input variables")
+for i,xi in enumerate(icscream_7._X_Penalized[1:]): 
+    for j,xj in enumerate(icscream_7._X_Penalized[0:i]):
+        # Definition of 2D conditional mean function
+        crossCutFunction = icscream_7.build_2D_conditional_exceedance_probability_as_PythonFunction(xi, xj)
+        crossCutLowerBound = [lowerBound[j], lowerBound[i]]
+        crossCutUpperBound = [upperBound[j], upperBound[i]]
+
+        # Get and customize the contour ploticscream_7._X_Penalized[i]
+        graph = crossCutFunction.draw(crossCutLowerBound, crossCutUpperBound, [5, 5])
+        graph.setTitle("")
+        contour = graph.getDrawable(0).getImplementation()
+        vmin = min(vmin, contour.getData().getMin()[0])
+        vmax = max(vmax, contour.getData().getMax()[0])
+        contour.setColorBarPosition("")  # suppress colorbar of each plot
+        contour.setColorMap("viridis")
+        graph.setDrawable(contour, 0)
+        # graph.setXTitle("")
+        # graph.setYTitle("")
+        graph.setTickLocation(ot.GraphImplementation.TICKNONE)
+        graph.setGrid(False)
+
+        # # Creation of axes title
+        # if j == 0:
+        #     graph.setYTitle("X%i" % (i + 1))
+        # if i == dim - 1:
+        #     graph.setXTitle("X%i" % (j + 1))
+
+        grid.setGraph(i - 1, j, graph)
+
+for i in range(1, dim):
+    for j in range(i):
+        graph = grid.getGraph(i - 1, j)
+        contour = graph.getDrawable(0).getImplementation()
+        contour.setVmin(vmin)
+        contour.setVmax(vmax)
+        graph.setDrawable(contour, 0)
+        grid.setGraph(i - 1, j, graph)
+
+# Get View object to manipulate the underlying figure
+v = View(grid)
+fig = v.getFigure()
+fig.set_size_inches(12, 12)  # reduce the size
+
+
+# Setup a large colorbar
+axes = v.getAxes()
+colorbar = fig.colorbar(
+    v.getSubviews()[2][2].getContourSets()[0], ax=axes[:, -1], fraction=0.1
+)
+
+fig.subplots_adjust(top=1.0, bottom=0.0, left=0.0, right=1.0)
+fig.savefig("GP_based_exceedance_proba_2fixed.pdf")
+
+# %%

@@ -30,7 +30,7 @@ icscream_3.load("save_files/modFriedmanfunc_afteraggregation.npy")
 #------------------#
 t_0 = tm.time()
 results_build_explanatory = icscream_3.build_explanatory_variables()
-res_trend = icscream_3.setup_trend_and_covariance_models()
+res_trend = icscream_3.setup_trend_and_covariance_models(trend_factory="LinearBasisFactory") #"ConstantBasisFactory"
 res_krigdata = icscream_3.build_kriging_data()
 res_buildtraintest = icscream_3.build_train_and_validation_sets_by_greedy_support_points()
 time_elapsed_sec = tm.time() - t_0

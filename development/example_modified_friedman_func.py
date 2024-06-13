@@ -21,9 +21,9 @@ output = ["Y"]
 formula = "var a[5] := {5.0, 20.0, 8.0, 5.0, 1.5};"
 formula += "var X[15] := {" + ",".join(inputs[:15]) + "};"
 formula += "var sumsquares :=0;"
-formula += "for (var i :=6; i<=15; i+=1) {sumsquares += i^2};"
+formula += "for (var i :=6; i<=15; i+=1) {sumsquares += (15-i+1)^2};"
 formula += "var sumrest :=0;"
-formula += "for (var i :=6; i<=15; i+=1) {sumrest += i*(X[i-1] - 0.5)};"
+formula += "for (var i :=6; i<=15; i+=1) {sumrest += (15-i+1)*(X[i-1] - 0.5)};"
 formula += "var rest := a[4]/sqrt(sumsquares) * sqrt(12)*sumrest;"
 formula += "var sinterm := a[0] * sin(6*pi_*X1^(5/2)*(X2 - 0.5));"
 formula += "Y := sinterm + a[1]*(X3 - 0.5)^2 + a[2]*X4 + a[3]*X5 + rest;"
@@ -133,3 +133,4 @@ class ConditionalExceedanceProbability2D(ot.OpenTURNSPythonFunction):
 
 
 conditional_proba_ref_X1_X2 = ot.Function(ConditionalExceedanceProbability2D(0, 1))
+

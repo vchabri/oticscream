@@ -52,9 +52,9 @@ print(
 icscream_6.save("save_files/save_test_X_tilda_X_pen_given_data.npy")
 
 #%%
-from openturns.viewer import View
+# from openturns.viewer import View
 
-graph = ot.VisualTest.DrawPairs(res_X_penalized_given_data)
-view = View(graph)
-plt.show()
+# graph = ot.VisualTest.DrawPairs(res_X_penalized_given_data)
+# view = View(graph)
+# plt.show()
 

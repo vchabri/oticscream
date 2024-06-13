@@ -29,7 +29,7 @@ icscream_4.load("save_files/save_afteric3.npy")
 # %%
 #------------------#
 t_0 = tm.time()
-res_krigmm = icscream_4.build_and_run_kriging_metamodel()
+res_krigmm = icscream_4.build_and_run_kriging_metamodel(nsample_multistart=30)
 time_elapsed_sec = tm.time() - t_0
 print(
     ">> Info: Elapsed time for the whole run:",

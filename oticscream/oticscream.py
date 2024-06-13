@@ -565,11 +565,7 @@ class Icscream:
         # Explanatory variables
         # ---------------------------
         # Trick: use pd.unique() instead of np.unique() to avoid sorting indices
-        self._X_Explanatory = pd.unique(
-            np.concatenate(
-                (self._X_Primary_Influential_Inputs, self._X_Penalized), axis=None
-            ).tolist()
-        ).tolist()
+        self._X_Explanatory = pd.unique(np.array(self._X_Primary_Influential_Inputs + self._X_Penalized)).tolist()
         # Check whether there is any duplicate between X_Explanatory and X_Secondary_Influential_Inputs
         self._X_Secondary_Influential_Inputs_after_aggregation = [
             elem
@@ -599,7 +595,7 @@ class Icscream:
 
     def setup_trend_and_covariance_models(
         self,
-        trend_factory="ConstantBasisFactory",
+        trend_factory="ConstantBasisFactory", #LinearBasisFactory
         marginal_cov_model=ot.MaternModel([1.0], [1.0], 5.0 / 2.0),
     ):
 

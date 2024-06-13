@@ -37,5 +37,17 @@ print(
     "(sec)",
 )
 #------------------#
+
+# %%
+print(kriging_hyperparameters)
+print(validation_metrics)
+
+# %%
+validation_graphs["residuals"]
+# %%
+validation_graphs["observed_vs_predicted"]
+# %%
+validation_graphs["QQplot"]
+
 #%%
 icscream_5.save("save_files/save_after_kriging_validation.npy")

@@ -18,7 +18,7 @@ from example_modified_friedman_func import modifiedFriedman
 # %%
 # Modified Friedman function (ref Marrel et al. 2021)
 # ---------------------------
-ot.RandomGenerator.SetSeed(1)
+ot.RandomGenerator.SetSeed(2)
 
 d_penalized = 5
 
@@ -30,7 +30,7 @@ myDistribution = ot.JointDistribution(distributionList)
 
 variable_names = ["X" + str(x) for x in range(1, d + 1)]
 
-Nsim = 200 # number in Marrel et al.
+Nsim = 250 # number in Marrel et al.
 input_sample = myDistribution.getSample(Nsim)
 input_sample.setDescription(variable_names)
 output_sample = modifiedFriedman(input_sample)
