@@ -290,7 +290,7 @@ class Icscream:
         )
         graph_output.setLegendPosition("topright")
         graph_output.setTitle(
-            "Empirical quantile = {:.6}".format(self._empirical_quantile)
+            "Empirical quantile = {:.6}".format(self._empirical_quantile) + f" (n = {self._sample_output.getSize()})"
         )
         graph_output.setXTitle("Y")
         graph_output.setYTitle("")
@@ -737,7 +737,7 @@ class Icscream:
 
         bounded_dist_multi = ot.JointDistribution(dist_multi)
         one_start = ot.NLopt(optimization_algo)
-        one_start.setMaximumEvaluationNumber(10000)
+        one_start.setMaximumCallsNumber(10000)
 
         kriging_algo.setOptimizationAlgorithm(
             ot.MultiStart(
