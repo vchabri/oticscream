@@ -43,6 +43,14 @@ import otkerneldesign as otkd
 # - TODO : traiter un .CSV comme dictionnaire des distributions des entrées (lois et bornes)
 # """
 
+def build_EnergyDistance_pdkernel(theta_ed):
+    """
+    TODO
+    """
+    energy_distance = ot.SymbolicFunction(['tau'], ['abs(tau)'])
+    EnergyDistance_pdkernel = ot.StationaryFunctionalCovarianceModel([theta_ed], [1.0], energy_distance)
+
+    return EnergyDistance_pdkernel
 
 def get_indices(greedysupportpoints, sample):
     """
@@ -205,7 +213,7 @@ class Icscream:
         self._p_value_threshold = p_value_threshold
         self._n_perm = n_perm
 
-        if covariance_collection is None:
+        if covariance_collection == "SquaredExponential":
             input_covariance_collection = []
             for i in range(self._dim_input):
                 Xi = self._sample_input.getMarginal(i)
@@ -217,6 +225,19 @@ class Icscream:
             self._covariance_collection = input_covariance_collection + [
                 output_covariance
             ]
+        elif covariance_collection == "EnergyDistance":
+            input_covariance_collection = []
+            for i in range(self._dim_input):
+                Xi = self._sample_input.getMarginal(i)
+                std_i = Xi.computeStandardDeviation()[0]
+                input_covariance = build_EnergyDistance_pdkernel(std_i)
+                input_covariance_collection.append(input_covariance)
+            std_Y = self._sample_output.computeStandardDeviation()[0]
+            output_covariance = build_EnergyDistance_pdkernel(std_Y)
+            self._covariance_collection = input_covariance_collection + [
+                output_covariance
+            ]
+    
         else:
             self._covariance_collection = covariance_collection
 
@@ -976,7 +997,7 @@ class Icscream:
         # ---------------------------
         # This scaling step is mandatory due to the modeling of the X_SII through an isotropic covariance model which mixes several heterogenous variables (with possible various ranges of correlation lengths)
         ## Warning: in Numpy, the np.std is biased while in Pandas, pd.std is unbiased by default.
-        ## COMMENT: it may be possible not to standardize the date. One should be careful with respect to the final optimization step.
+        ## COMMENT: it may be possible not to standardize the data. One should be careful with respect to the final optimization step.
         # self._scaled_x_data = (self._x_data - self._x_data.mean(axis=0)) / self._x_data.std(
         #     axis=0, ddof=1
         # )
