@@ -1140,6 +1140,36 @@ class Icscream:
         return kriging_algo
 
     def validate_kriging_metamodel_using_hold_out_sample(self):
+        """
+        Validate the kriging metamodel using a hold-out validation sample.
+
+        This method evaluates the predictive performance of the trained kriging metamodel
+        using a separate validation set. It computes key validation metrics and generates
+        diagnostic plots including:
+        - Histogram of residuals
+        - Observed vs. predicted values
+        - QQ-plot of predictions vs. observations
+
+        Returns
+        -------
+        kriging_hyperparameters : dict
+            Dictionary containing the optimized trend coefficients, lengthscales, amplitude,
+            and nugget factor of the kriging model.
+        validation_metrics : dict
+            Dictionary containing:
+            - "Q2": Predictivity coefficient (coefficient of determination)
+            - "signed_PVA": Signed Predictive Variance Adequacy (log-scaled)
+        validation_graphs : dict
+            Dictionary of OpenTURNS Graph objects with keys:
+            - "residuals"
+            - "observed_vs_predicted"
+            - "QQplot"
+
+        Notes
+        -----
+        - The residual histogram uses a fallback strategy if automatic binning fails (Issue #2655).
+        - The signed PVA is computed as the log-ratio of squared residuals to conditional variance.
+        """
 
         # Get optimized hyperparameters for trend and covariance
         # ---------------------------
@@ -1257,6 +1287,31 @@ class Icscream:
         n_sample_X_Tilda=1000,
         method_compute_m_ebc="AMISE",
     ):
+        """
+        Construct and sample the distribution of the X_Tilda variables.
+
+        This method generates a sample of the explanatory variables `X_Tilda`, either by:
+        - Drawing from a known aleatory distribution (if provided), or
+        - Estimating the joint distribution from data using kernel density estimation.
+
+        Parameters
+        ----------
+        n_sample_X_Tilda : int, optional
+            Number of samples to generate from the X_Tilda distribution (default is 1000).
+        method_compute_m_ebc : str, optional
+            Method used to compute the bandwidth for kernel density estimation
+            (e.g., "AMISE", "Silverman", etc.). Only used if the distribution is learned.
+
+        Returns
+        -------
+        openturns.Sample
+            A sample of the X_Tilda variables drawn from the constructed or known distribution.
+
+        Notes
+        -----
+        - If `self._dist_aleatory` is provided, the method extracts the relevant marginals.
+        - Otherwise, it fits a joint distribution to the observed data using the specified method.
+        """
         if self._dist_aleatory is not None:
             # Case #1 - The distribution of X_Tilda is already known
             # --------------
@@ -1280,6 +1335,31 @@ class Icscream:
         n_sample_X_penalized=1000,
         method_compute_m_ebc="AMISE",
     ):
+        """
+        Construct and sample the distribution of the X_Penalized variables.
+
+        This method generates a sample of the penalized variables either by:
+        - Drawing from a known penalized distribution (if provided), or
+        - Estimating the joint distribution from observed data using kernel density estimation.
+
+        Parameters
+        ----------
+        n_sample_X_penalized : int, optional
+            Number of samples to generate from the X_Penalized distribution (default is 1000).
+        method_compute_m_ebc : str, optional
+            Method used to compute the bandwidth for kernel density estimation
+            (e.g., "AMISE", "Silverman", etc.). Only used if the distribution is learned.
+
+        Returns
+        -------
+        openturns.Sample
+            A sample of the X_Penalized variables drawn from the constructed or known distribution.
+
+        Notes
+        -----
+        - If `self._dist_penalized` is provided, it is used directly to generate the sample.
+        - Otherwise, the distribution is estimated from the available penalized sample.
+        """
         if self._dist_penalized is not None:
             # Case #1 - The distribution of X_Penalized is already known
             # --------------
