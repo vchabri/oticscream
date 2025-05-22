@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Copyright (C) EDF 2024
+Copyright (C) EDF 2025
 
-@authors: Vincent Chabridon, Joseph Muré, Elias Fekhari
+@authors: Vincent Chabridon, Joseph Muré
 """
 import os
 
@@ -46,17 +46,29 @@ import otkerneldesign as otkd
 
 def get_indices(greedysupportpoints, sample):
     """
-    When provided a subsample of the candidate set, returns the indices of its points in the candidate set.
+    Retrieve the indices of sample points within the candidate set.
+
+    Given a subsample of the candidate set, this function returns the indices of those points
+    as they appear in the candidate set stored in the `greedysupportpoints` object.
 
     Parameters
     ----------
-    sample : 2-d list of float
-        A subsample of the candidate set.
+    greedysupportpoints : object
+        An object that contains the full candidate set as an attribute `_candidate_set`.
+    sample : list of list of float
+        A 2D list representing a subsample of points from the candidate set.
 
     Returns
     -------
     indices : list of int
-        Indices of the points of the sample within the candidate set.
+        A list of indices corresponding to the positions of the sample points
+        within the candidate set.
+
+    Raises
+    ------
+    ValueError
+        If `sample` is not a 2D array or if any point in `sample` is not found
+        exactly once in the candidate set.
     """
     sample = np.array(sample)
     if len(sample.shape) != 2:
@@ -117,6 +129,47 @@ class Icscream:
         p_value_threshold=0.05,
         n_perm=200,
     ):
+        """
+        Initialize the model with input/output data, distributions, and configuration parameters.
+
+        This constructor sets up the internal data structures for penalized and aleatory variables,
+        their associated distributions, and the output variable. It also prepares OpenTURNS samples,
+        computes the empirical quantile of the output, and initializes covariance functions for
+        Gaussian process modeling.
+
+        Parameters
+        ----------
+        df_penalized : pandas.DataFrame
+            DataFrame containing the penalized input variables.
+        df_aleatory : pandas.DataFrame
+            DataFrame containing the aleatory (random) input variables.
+        dist_penalized : openturns.Distribution, optional
+            OpenTURNS distribution associated with the penalized variables.
+        dist_aleatory : openturns.Distribution, optional
+            OpenTURNS distribution associated with the aleatory variables.
+        df_output : pandas.DataFrame
+            DataFrame containing the output variable.
+        covariance_collection : list of openturns.CovarianceModel, optional
+            List of covariance models for each input and the output. If not provided,
+            squared exponential models are created with automatic scaling.
+        output_quantile_order : float, optional
+            Quantile order used to compute the empirical output quantile (default is 0.9).
+        p_value_threshold : float, optional
+            Threshold for statistical significance in permutation tests (default is 0.05).
+        n_perm : int, optional
+            Number of permutations used in statistical tests (default is 200).
+
+        Raises
+        ------
+        ValueError
+            If any of the required DataFrames (`df_penalized`, `df_aleatory`, `df_output`) is not provided.
+
+        Notes
+        -----
+        This constructor also initializes internal structures for sensitivity analysis (GSA, TSA, CSA),
+        kriging metamodeling, and variable selection. It prepares the object for further analysis
+        and modeling tasks.
+        """
         if (df_penalized is None) or (df_aleatory is None) or (df_output is None):
             raise ValueError(
                 "Please, provide lists corresponding to 'df_penalized'', 'df_aleatory' and 'df_output'."
@@ -235,6 +288,25 @@ class Icscream:
         self._list_probabilities_x_pen = None
 
     def save(self, filename):
+        """
+        Serialize and save the object's attributes to a file.
+
+        This method saves all attributes of the object to a binary file using `pickle`.
+        If an attribute name contains the substring `"study"` and is not `None`,
+        a placeholder string is saved instead. This is a workaround for a known issue
+        (see Issue #2624 on the OpenTURNS GitHub repository).
+
+        Parameters
+        ----------
+        filename : str
+            The path to the file where the object's attributes will be saved.
+
+        Notes
+        -----
+        Attributes containing `"study"` in their name are not saved directly if they are not `None`.
+        Instead, a placeholder string is saved. This behavior should be removed once the related
+        bug is fixed in OpenTURNS.
+        """
         attribute_names = self.__dict__.keys()  # Get the list of attribute names
         with open(filename, "wb") as f:
             for name in attribute_names:
@@ -249,6 +321,24 @@ class Icscream:
                     )  # Save the attributes of the self.__dict__
 
     def load(self, filename):
+        """
+        Load and restore the object's attributes from a file.
+
+        This method restores the object's internal state by loading each attribute
+        from a binary file previously saved using the `save` method. It assumes that
+        the attributes are stored in the same order as they appear in `self.__dict__`.
+
+        Parameters
+        ----------
+        filename : str
+            The path to the file from which the object's attributes will be loaded.
+
+        Notes
+        -----
+        This method does not handle placeholder values saved for `"study"` attributes.
+        If such placeholders were saved, the corresponding attributes will be restored
+        as the string `"placeholder"`, and should be manually reassigned if needed.
+        """
         attribute_names = self.__dict__.keys()  # Get the list of attribute names
         with open(filename, "rb") as f:
             for name in attribute_names:
@@ -257,6 +347,26 @@ class Icscream:
                 )  # Load each attribute in the initial order
 
     def draw_output_sample_analysis(self):
+        """
+        Generate a statistical visualization of the output sample.
+
+        This method creates a plot that includes:
+        - A histogram of the output sample.
+        - A kernel density estimate (KDE) of the output distribution.
+        - Vertical lines indicating the mean, median, and empirical quantile.
+
+        Returns
+        -------
+        graph_output : openturns.Graph
+            A graph object containing the histogram, KDE curve, and vertical lines
+            for the mean, median, and empirical quantile of the output sample.
+
+        Notes
+        -----
+        The KDE is computed using OpenTURNS' `KernelSmoothing`. The vertical lines
+        help visualize the central tendency and tail behavior of the output distribution.
+        The empirical quantile is based on the quantile order defined at initialization.
+        """
         hist = ot.HistogramFactory().build(self._sample_output)
         graph_output = hist.drawPDF()
         #
@@ -298,9 +408,38 @@ class Icscream:
         return graph_output
 
     def set_permutation_size(self, n_perm):
+        """
+        Set the number of permutations used in statistical tests.
+
+        Parameters
+        ----------
+        n_perm : int
+            The number of permutations to use in permutation-based statistical tests.
+        """
         self._n_perm = n_perm
 
     def perform_GSA_study(self, hsic_estimator_type=ot.HSICUStat(), savefile=None):
+        """
+        Perform a Global Sensitivity Analysis (GSA) using the HSIC estimator.
+
+        This method computes HSIC-based sensitivity indices, R²-HSIC scores, and
+        associated p-values (both permutation-based and asymptotic). The results
+        are stored internally and optionally saved to a CSV file.
+
+        Parameters
+        ----------
+        hsic_estimator_type : openturns.HSICEstimator, optional
+            The HSIC estimator to use (default is `HSICUStat()`).
+        savefile : str, optional
+            Path to a CSV file where the GSA results will be saved. If `None`,
+            results are not saved to disk.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing the HSIC indices, R²-HSIC scores, and p-values
+            for each input variable.
+        """
         self._GSA_study = ot.HSICEstimatorGlobalSensitivity(
             self._covariance_collection,
             self._sample_input,
@@ -323,6 +462,34 @@ class Icscream:
         return self._GSA_results
 
     def perform_TSA_study(self, hsic_estimator_type=ot.HSICUStat(), savefile=None):
+        """
+        Perform a Target Sensitivity Analysis (TSA) using the HSIC estimator.
+
+        This method evaluates the sensitivity of input variables with respect to
+        the probability of the output exceeding a critical threshold (empirical quantile).
+        It uses a smoothed indicator function to define the target region and computes
+        HSIC-based sensitivity indices, R²-HSIC scores, and p-values.
+
+        Parameters
+        ----------
+        hsic_estimator_type : openturns.HSICEstimator, optional
+            The HSIC estimator to use (default is `HSICUStat()`).
+        savefile : str, optional
+            Path to a CSV file where the TSA results will be saved. If `None`,
+            results are not saved to disk.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing the target HSIC indices, R²-HSIC scores, and
+            p-values for each input variable.
+
+        Notes
+        -----
+        The target region is defined as the interval `[empirical_quantile, ∞)`.
+        A smoothed exponential function is used to approximate the indicator function
+        for this region.
+        """
         critical_domain = ot.Interval(self._empirical_quantile, float("inf"))
         dist_to_critical_domain = ot.DistanceToDomainFunction(critical_domain)
         smoothing_parameter = 0.1 * self._sample_output.computeStandardDeviation()[0]
@@ -353,6 +520,32 @@ class Icscream:
         return self._TSA_results
 
     def perform_CSA_study(self, savefile=None):
+        """
+        Perform a Conditional Sensitivity Analysis (CSA) using the HSIC estimator.
+
+        This method evaluates the sensitivity of input variables conditioned on the
+        output being in a critical region (e.g., exceeding a quantile threshold).
+        It uses a smoothed indicator function to define the conditioning region and
+        computes HSIC-based conditional sensitivity indices and p-values.
+
+        Parameters
+        ----------
+        savefile : str, optional
+            Path to a CSV file where the CSA results will be saved. If `None`,
+            results are not saved to disk.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing the conditional HSIC indices, R²-HSIC scores,
+            and permutation-based p-values for each input variable.
+
+        Notes
+        -----
+        The conditioning region is defined as the interval `[empirical_quantile, ∞)`.
+        A smoothed exponential function is used to approximate the indicator function
+        for this region.
+        """
         critical_domain = ot.Interval(self._empirical_quantile, float("inf"))
         dist_to_critical_domain = ot.DistanceToDomainFunction(critical_domain)
         smoothing_parameter = 0.1 * self._sample_output.computeStandardDeviation()[0]
@@ -379,6 +572,35 @@ class Icscream:
         return self._CSA_results
 
     def draw_sensitivity_results(self):
+        """
+        Generate and return graphical summaries of GSA, TSA, and CSA results.
+
+        This method ensures that the three sensitivity studies (Global, Target, and Conditional)
+        are performed if not already done, and then generates OpenTURNS graphs for:
+        - R²-HSIC indices
+        - Asymptotic and permutation-based p-values
+
+        For each study, the method adds a horizontal threshold line at 0.05 to help interpret
+        statistical significance of p-values.
+
+        Returns
+        -------
+        dict of openturns.Graph
+            A dictionary containing the following keys and their corresponding graphs:
+            - "GSA indices"
+            - "GSA pval asymp"
+            - "GSA pval perm"
+            - "TSA indices"
+            - "TSA pval asymp"
+            - "TSA pval perm"
+            - "CSA indices"
+            - "CSA pval perm"
+
+        Notes
+        -----
+        The method uses OpenTURNS' built-in plotting functions and customizes colors,
+        titles, and axis labels for clarity.
+        """
         if self._GSA_study is None:
             _ = self.perform_GSA_study()
         if self._TSA_study is None:
@@ -471,6 +693,39 @@ class Icscream:
     def aggregate_pvalues_and_sort_variables(
         self, isAsymptotic=False, sortby_method="Bonferroni"
     ):
+        """
+        Aggregate p-values from GSA, TSA, and CSA studies and sort input variables by influence.
+
+        This method combines p-values from different sensitivity analyses (GSA, TSA, CSA),
+        applies a correction method (e.g., Bonferroni), and classifies input variables into
+        three categories based on their statistical significance:
+        - Primary influential inputs
+        - Secondary influential inputs
+        - Non-influential inputs (epsilon)
+
+        Parameters
+        ----------
+        isAsymptotic : bool, optional
+            If True, use asymptotic p-values; otherwise, use permutation-based p-values.
+        sortby_method : str, optional
+            The method used to aggregate p-values. Currently supports:
+            - "Bonferroni"
+
+        Returns
+        -------
+        dict
+            A dictionary with keys:
+            - "X_Primary_Influential_Inputs"
+            - "X_Secondary_Influential_Inputs"
+            - "X_Epsilon"
+            Each key maps to a list of variable names sorted by their aggregated p-values.
+
+        Notes
+        -----
+        - The Bonferroni aggregation is computed as: `min(2 * min(pval_GSA, pval_TSA), 1)`.
+        - CSA p-values are included in the aggregation table but not yet used in the aggregation logic.
+        - Future extensions may include Fisher, Tippet, or Inverse Gamma-based aggregation.
+        """
         if self._GSA_study is None:
             _ = self.perform_GSA_study()
         if self._TSA_study is None:
@@ -557,6 +812,38 @@ class Icscream:
         return inputs_dict_sorted_variables
 
     def build_explanatory_variables(self):
+        """
+        Construct explanatory variable sets for metamodeling.
+
+        This method builds several sets of variables based on the results of the
+        sensitivity analysis:
+        - Penalized variables (from the original input set)
+        - Primary influential variables (from aggregated p-values)
+        - Secondary influential variables not already included
+        - A reduced set `X_Tilda` excluding penalized variables
+
+        If the number of explanatory variables exceeds 30, a sequential strategy
+        is recommended (not yet implemented).
+
+        Returns
+        -------
+        dict
+            A dictionary containing:
+            - "X_Penalized" : list of str
+                Names of penalized input variables.
+            - "X_Explanatory" : list of str
+                Union of primary influential and penalized variables.
+            - "X_Secondary_Influential_Inputs_after_aggregation" : list of str
+                Secondary influential variables not already in explanatory set.
+            - "X_Tilda" : list of str
+                Explanatory variables excluding penalized ones.
+
+        Raises
+        ------
+        ValueError
+            If the number of explanatory variables exceeds 30, suggesting that
+            a sequential strategy should be implemented.
+        """
 
         # Penalized variables
         # ---------------------------
@@ -599,6 +886,27 @@ class Icscream:
         marginal_cov_model=ot.MaternModel([1.0], [1.0], 5.0 / 2.0),
     ):
 
+        """
+        Set up the trend and covariance models for kriging metamodeling.
+
+        This method defines the trend basis and the covariance structure for the kriging model
+        based on the explanatory and secondary influential variables. It supports flexible
+        trend model selection and allows specification of a marginal covariance model.
+
+        Parameters
+        ----------
+        trend_factory : str, optional
+            Name of the OpenTURNS trend factory to use (e.g., "ConstantBasisFactory", "LinearBasisFactory").
+            The factory is evaluated dynamically using `eval()`.
+        marginal_cov_model : openturns.CovarianceModel, optional
+            The marginal covariance model to use for each input dimension. Default is a Matern 5/2 model.
+
+        Notes
+        -----
+        - The total kriging input dimension is the sum of explanatory and secondary influential variables.
+        - If no secondary influential variables are present, only the explanatory covariance model is used.
+        - A nugget effect is activated to allow for homoscedastic noise modeling.
+        """
         # Managing input dimensions
         # ---------------------------
         dim_krig = len(self._X_Explanatory) + len(
@@ -639,6 +947,21 @@ class Icscream:
         self._cov_kriging_model.activateNuggetFactor(True)
 
     def build_kriging_data(self):
+        """
+        Prepare input and output data for kriging metamodeling.
+
+        This method extracts the relevant input variables (explanatory and secondary influential)
+        and the output sample to be used for kriging. It assumes that the data are already scaled
+        appropriately, especially due to the use of isotropic covariance models.
+
+        Notes
+        -----
+        - The input data are selected based on the union of explanatory and secondary influential variables.
+        - Scaling is critical when using isotropic covariance models, as they assume homogeneous
+        correlation lengths across variables.
+        - The actual scaling step is commented out but documented for clarity.
+        - The scaled data can be constructed using `ot.Sample.BuildFromDataFrame()` if needed.
+        """
         ## WARNING:
         ## It is assumed that the data are already scaled.
 
@@ -660,7 +983,24 @@ class Icscream:
         # scaled_x_data_sample = ot.Sample.BuildFromDataFrame(self._scaled_x_data)
 
     def build_train_and_validation_sets_by_greedy_support_points(self, test_ratio=0.2):
+        """
+        Split the dataset into training and validation sets using Greedy Support Points.
 
+        This method applies the Kernel Herding algorithm (via Greedy Support Points)
+        to reorder the dataset and select representative training and validation subsets.
+        The selection is based on energy distance minimization using the `otkerneldesign` library.
+
+        Parameters
+        ----------
+        test_ratio : float, optional
+            Proportion of the dataset to allocate to the validation set (default is 0.2).
+
+        Notes
+        -----
+        - The method uses a workaround for a known bug in `otkerneldesign` (see Issue #6).
+        - The dataset is assumed to be already scaled.
+        - The selected indices are stored internally and used to extract the corresponding samples.
+        """
         # Perform Kernel Herding based on the Greedy Support Points algorithm using otkerneldesign for selecting both train and test designs
         # ---------------------------
 
@@ -690,7 +1030,33 @@ class Icscream:
     def build_and_run_kriging_metamodel(
         self, optimization_algo="LN_COBYLA", nsample_multistart=10
     ):
+        """
+        Build and train a kriging metamodel using multistart optimization.
 
+        This method sets up and runs the kriging algorithm using the provided trend and covariance models.
+        It performs multistart optimization of the hyperparameters using a low-discrepancy Sobol sequence
+        and a specified optimization algorithm.
+
+        Parameters
+        ----------
+        optimization_algo : str, optional
+            Name of the optimization algorithm to use (default is "LN_COBYLA").
+            Other options include "LD_LBFGS", "LD_SLSQP", etc.
+        nsample_multistart : int, optional
+            Number of starting points for the multistart optimization (default is 10).
+
+        Returns
+        -------
+        openturns.KrigingAlgorithm
+            The trained kriging algorithm object containing the result and metamodel.
+
+        Notes
+        -----
+        - The amplitude parameter is optimized analytically and excluded from the multistart sampling.
+        - The input data are assumed to be scaled.
+        - The optimization bounds are currently fixed between 0 and 1 for each hyperparameter.
+        - The resulting metamodel is stored in `self._kriging_metamodel`.
+        """
         # # Compute min-max bounds of the dataset to help for the hyperparameters' optimization
         # # ---------------------------
         # ## Hypothesis: we suppose that the x_data have been already scaled prior to performing ICSCREAM
