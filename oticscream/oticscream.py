@@ -44,6 +44,7 @@ import otkerneldesign as otkd
 # - TODO : traiter un .CSV comme dictionnaire des distributions des entrées (lois et bornes)
 # """
 
+
 def calculate_euclidean_distances(sample):
     """
     Calcule toutes les distances euclidiennes deux à deux dans un échantillon.
@@ -55,7 +56,7 @@ def calculate_euclidean_distances(sample):
     numpy.ndarray : Une matrice 2D contenant les distances euclidiennes.
     """
     sample_array = np.array(sample)
-    distances = pdist(sample_array, metric='euclidean')
+    distances = pdist(sample_array, metric="euclidean")
     distance_matrix = squareform(distances)
     return ot.CovarianceMatrix(-distance_matrix)
 
@@ -65,15 +66,18 @@ def build_EnergyDistance_pdkernel(sample):
     TODO
     """
     # Save old lines (VCN, JME)
-    #---------------#
+    # ---------------#
     # energy_distance = ot.SymbolicFunction(['tau'], ['abs(tau)'])
     # EnergyDistance_pdkernel = ot.StationaryFunctionalCovarianceModel([1.0], [1.0], energy_distance)
 
     energy_distance_matrix = calculate_euclidean_distances(sample)
     mesh = ot.Mesh(sample)
-    EnergyDistance_pdkernel = ot.UserDefinedCovarianceModel(mesh, energy_distance_matrix)
+    EnergyDistance_pdkernel = ot.UserDefinedCovarianceModel(
+        mesh, energy_distance_matrix
+    )
 
     return EnergyDistance_pdkernel
+
 
 def get_indices(greedysupportpoints, sample):
     """
@@ -258,7 +262,7 @@ class Icscream:
             self._covariance_collection = input_covariance_collection + [
                 output_covariance
             ]
-    
+
         else:
             self._covariance_collection = covariance_collection
 
@@ -442,7 +446,8 @@ class Icscream:
         )
         graph_output.setLegendPosition("topright")
         graph_output.setTitle(
-            "Empirical quantile = {:.6}".format(self._empirical_quantile) + f" (n = {self._sample_output.getSize()})"
+            "Empirical quantile = {:.6}".format(self._empirical_quantile)
+            + f" (n = {self._sample_output.getSize()})"
         )
         graph_output.setXTitle("Y")
         graph_output.setYTitle("")
@@ -492,12 +497,12 @@ class Icscream:
 
         self._GSA_results.loc["HSIC", :] = self._GSA_study.getHSICIndices()
         self._GSA_results.loc["R2-HSIC", :] = self._GSA_study.getR2HSICIndices()
-        self._GSA_results.loc[
-            "p-values perm", :
-        ] = self._GSA_study.getPValuesPermutation()
-        self._GSA_results.loc[
-            "p-values asymp", :
-        ] = self._GSA_study.getPValuesAsymptotic()
+        self._GSA_results.loc["p-values perm", :] = (
+            self._GSA_study.getPValuesPermutation()
+        )
+        self._GSA_results.loc["p-values asymp", :] = (
+            self._GSA_study.getPValuesAsymptotic()
+        )
 
         if savefile is not None:
             self._GSA_results.to_csv(savefile, index=True)
@@ -550,12 +555,12 @@ class Icscream:
 
         self._TSA_results.loc["T-HSIC", :] = self._TSA_study.getHSICIndices()
         self._TSA_results.loc["T-R2-HSIC", :] = self._TSA_study.getR2HSICIndices()
-        self._TSA_results.loc[
-            "p-values perm", :
-        ] = self._TSA_study.getPValuesPermutation()
-        self._TSA_results.loc[
-            "p-values asymp", :
-        ] = self._TSA_study.getPValuesAsymptotic()
+        self._TSA_results.loc["p-values perm", :] = (
+            self._TSA_study.getPValuesPermutation()
+        )
+        self._TSA_results.loc["p-values asymp", :] = (
+            self._TSA_study.getPValuesAsymptotic()
+        )
 
         if savefile is not None:
             self._TSA_results.to_csv(savefile, index=True)
@@ -605,9 +610,9 @@ class Icscream:
 
         self._CSA_results.loc["C-HSIC", :] = self._CSA_study.getHSICIndices()
         self._CSA_results.loc["C-R2-HSIC", :] = self._CSA_study.getR2HSICIndices()
-        self._CSA_results.loc[
-            "p-values perm", :
-        ] = self._CSA_study.getPValuesPermutation()
+        self._CSA_results.loc["p-values perm", :] = (
+            self._CSA_study.getPValuesPermutation()
+        )
 
         if savefile is not None:
             self._CSA_results.to_csv(savefile, index=True)
@@ -779,26 +784,26 @@ class Icscream:
 
         if isAsymptotic:
             print(">> Info: Asymptotic regime => asymptotic p-values will be used!")
-            self._Aggregated_pval_results.loc[
-                "GSA p-values", :
-            ] = self._GSA_results.loc["p-values asymp", :]
-            self._Aggregated_pval_results.loc[
-                "TSA p-values", :
-            ] = self._TSA_results.loc["p-values asymp", :]
+            self._Aggregated_pval_results.loc["GSA p-values", :] = (
+                self._GSA_results.loc["p-values asymp", :]
+            )
+            self._Aggregated_pval_results.loc["TSA p-values", :] = (
+                self._TSA_results.loc["p-values asymp", :]
+            )
         else:
             print(
                 ">> Info: Non-asymptotic regime => permutation-based p-values will be used!"
             )
-            self._Aggregated_pval_results.loc[
-                "GSA p-values", :
-            ] = self._GSA_results.loc["p-values perm", :]
-            self._Aggregated_pval_results.loc[
-                "TSA p-values", :
-            ] = self._TSA_results.loc["p-values perm", :]
+            self._Aggregated_pval_results.loc["GSA p-values", :] = (
+                self._GSA_results.loc["p-values perm", :]
+            )
+            self._Aggregated_pval_results.loc["TSA p-values", :] = (
+                self._TSA_results.loc["p-values perm", :]
+            )
             # TODO : inclure  les p-valeurs CSA dans la stratégie globale
-            self._Aggregated_pval_results.loc[
-                "CSA p-values", :
-            ] = self._CSA_results.loc["p-values perm", :]
+            self._Aggregated_pval_results.loc["CSA p-values", :] = (
+                self._CSA_results.loc["p-values perm", :]
+            )
 
         pval_GSA = self._Aggregated_pval_results.loc["GSA p-values", :].values
         pval_TSA = self._Aggregated_pval_results.loc["TSA p-values", :].values
@@ -894,7 +899,9 @@ class Icscream:
         # Explanatory variables
         # ---------------------------
         # Trick: use pd.unique() instead of np.unique() to avoid sorting indices
-        self._X_Explanatory = pd.unique(np.array(self._X_Primary_Influential_Inputs + self._X_Penalized)).tolist()
+        self._X_Explanatory = pd.unique(
+            np.array(self._X_Primary_Influential_Inputs + self._X_Penalized)
+        ).tolist()
         # Check whether there is any duplicate between X_Explanatory and X_Secondary_Influential_Inputs
         self._X_Secondary_Influential_Inputs_after_aggregation = [
             elem
@@ -924,10 +931,9 @@ class Icscream:
 
     def setup_trend_and_covariance_models(
         self,
-        trend_factory="ConstantBasisFactory", #LinearBasisFactory
+        trend_factory="ConstantBasisFactory",  # LinearBasisFactory
         marginal_cov_model=ot.MaternModel([1.0], [1.0], 5.0 / 2.0),
     ):
-
         """
         Set up the trend and covariance models for kriging metamodeling.
 
@@ -1228,7 +1234,7 @@ class Icscream:
         # Validate the kriging metamodel using the 'ot.MetaModelValidation' class and the hold out validation sample
         # ---------------------------
         self._validation_results = ot.MetaModelValidation(
-            self._x_validation, self._y_validation, self._kriging_metamodel
+            self._y_validation, self._kriging_metamodel(self._x_validation)
         )
 
         kriging_residuals = np.array(
@@ -1241,12 +1247,12 @@ class Icscream:
 
         # Be careful about the definition of PVA (with/without absolute value)
         signed_predictive_variance_adequacy = np.log10(
-            np.sum((kriging_residuals ** 2) / kriging_conditional_variance)
+            np.sum((kriging_residuals**2) / kriging_conditional_variance)
             / len(kriging_residuals)
         )
 
         validation_metrics = {
-            "Q2": self._validation_results.computePredictivityFactor()[0],
+            "Q2": self._validation_results.computeR2Score()[0],
             "signed_PVA": signed_predictive_variance_adequacy,
         }
 
@@ -1551,9 +1557,9 @@ class Icscream:
         penalized_sample_columns = ot.Sample(
             full_sample_frozen_column.getSize(), values
         )
-        full_sample_frozen_column[
-            :, self._X_Penalized_indices_within_full_sample
-        ] = penalized_sample_columns
+        full_sample_frozen_column[:, self._X_Penalized_indices_within_full_sample] = (
+            penalized_sample_columns
+        )
 
         # Apply the predictor to compute the GP conditional mean wrt all the penalized inputs
         # --------------
@@ -1713,9 +1719,9 @@ class Icscream:
         penalized_sample_columns = ot.Sample(
             full_sample_frozen_column.getSize(), values
         )
-        full_sample_frozen_column[
-            :, self._X_Penalized_indices_within_full_sample
-        ] = penalized_sample_columns
+        full_sample_frozen_column[:, self._X_Penalized_indices_within_full_sample] = (
+            penalized_sample_columns
+        )
 
         return self.compute_conditional_exceedance_probability_from_metamodel(
             full_sample_frozen_column
