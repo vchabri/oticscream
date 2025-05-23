@@ -16,7 +16,8 @@ import openturns as ot
 print("OpenTURNS version:", ot.__version__)
 import openturns.viewer as otv
 
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, squareform
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -43,12 +44,34 @@ import otkerneldesign as otkd
 # - TODO : traiter un .CSV comme dictionnaire des distributions des entrées (lois et bornes)
 # """
 
-def build_EnergyDistance_pdkernel(theta_ed):
+def calculate_euclidean_distances(sample):
+    """
+    Calcule toutes les distances euclidiennes deux à deux dans un échantillon.
+
+    Paramètres :
+    sample (array-like) : Un tableau contenant les points de l’échantillon.
+
+    Retour :
+    numpy.ndarray : Une matrice 2D contenant les distances euclidiennes.
+    """
+    sample_array = np.array(sample)
+    distances = pdist(sample_array, metric='euclidean')
+    distance_matrix = squareform(distances)
+    return ot.CovarianceMatrix(-distance_matrix)
+
+
+def build_EnergyDistance_pdkernel(sample):
     """
     TODO
     """
-    energy_distance = ot.SymbolicFunction(['tau'], ['abs(tau)'])
-    EnergyDistance_pdkernel = ot.StationaryFunctionalCovarianceModel([theta_ed], [1.0], energy_distance)
+    # Save old lines (VCN, JME)
+    #---------------#
+    # energy_distance = ot.SymbolicFunction(['tau'], ['abs(tau)'])
+    # EnergyDistance_pdkernel = ot.StationaryFunctionalCovarianceModel([1.0], [1.0], energy_distance)
+
+    energy_distance_matrix = calculate_euclidean_distances(sample)
+    mesh = ot.Mesh(sample)
+    EnergyDistance_pdkernel = ot.UserDefinedCovarianceModel(mesh, energy_distance_matrix)
 
     return EnergyDistance_pdkernel
 
@@ -132,7 +155,7 @@ class Icscream:
         dist_penalized=None,
         dist_aleatory=None,
         df_output=None,
-        covariance_collection=None,
+        covariance_collection="EnergyDistance",
         output_quantile_order=0.9,
         p_value_threshold=0.05,
         n_perm=200,
@@ -229,11 +252,9 @@ class Icscream:
             input_covariance_collection = []
             for i in range(self._dim_input):
                 Xi = self._sample_input.getMarginal(i)
-                std_i = Xi.computeStandardDeviation()[0]
-                input_covariance = build_EnergyDistance_pdkernel(std_i)
+                input_covariance = build_EnergyDistance_pdkernel(Xi)
                 input_covariance_collection.append(input_covariance)
-            std_Y = self._sample_output.computeStandardDeviation()[0]
-            output_covariance = build_EnergyDistance_pdkernel(std_Y)
+            output_covariance = build_EnergyDistance_pdkernel(self._sample_output)
             self._covariance_collection = input_covariance_collection + [
                 output_covariance
             ]

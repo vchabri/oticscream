@@ -5,7 +5,7 @@ Copyright (C) EDF 2024
 
 @authors: Vincent Chabridon, Joseph Muré, Elias Fekhari
 """
-
+# %%
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -58,6 +58,7 @@ icscream = Icscream(
     df_aleatory=df_aleatory,
     dist_penalized=dist_penalized,
     dist_aleatory=dist_aleatory,
+    covariance_collection="SquaredExponential",
     df_output=dfy,
 )
 
