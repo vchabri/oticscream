@@ -1,15 +1,15 @@
 # oticscream
 
-**oticscream** is a Python library that integrates the ICSCREAM methodology with [OpenTURNS](https://openturns.org/), enabling advanced sensitivity analysis, uncertainty quantification, and robust model exploration.
+**oticscream** is a Python library that integrates the ICSCREAM methodology as published in [Nuclear Science and Engineering](https://www.tandfonline.com/doi/full/10.1080/00295639.2021.1980362) with [OpenTURNS](https://openturns.org/), enabling advanced sensitivity analysis, uncertainty quantification, and robust model exploration. 
 
 ## 📌 Overview
 
-This library implements the ICSCREAM (Incremental Construction of Surrogate-based Credible Risk Evaluation and Analysis Models) methodology using OpenTURNS components. It is designed to help practitioners build surrogate models efficiently and assess model sensitivity and uncertainty in a structured, repeatable way.
+This library implements the ICSCREAM (Identification of Penalizing Configurations in Computer Experiments Using Screening and Metamodel) methodology using OpenTURNS components. It is designed to help practitioners build surrogate models efficiently and assess model sensitivity and uncertainty in a structured, repeatable way, in order to identify penalizing input configurations.
 
 ## ✨ Features
 
-- Full implementation of the ICSCREAM workflow
-- Integration with OpenTURNS for UQ and sensitivity analysis
+- Full implementation of the ICSCREAM methodology
+- Integration with OpenTURNS for given-data robust identification of penalizing input values
 - Modular and extensible architecture
 - Automated unit tests and documentation
 - Suitable for industrial and academic use cases
@@ -21,6 +21,7 @@ This library implements the ICSCREAM (Incremental Construction of Surrogate-base
 - Python 3.8+
 - [OpenTURNS](https://openturns.org/)
 - NumPy, SciPy, Matplotlib
+- otkerneldesign
 
 ### Install with pip (local)
 
@@ -101,8 +102,8 @@ This project is licensed under the GNU General Public License v3.0 – see the [
 
 ## 🙏 Acknowledgments
 
-- [OpenTURNS](https://openturns.org/)
-- ICSCREAM methodology authors and contributors
+- [The OpenTURNS consortium](https://openturns.org/)
+- ICSCREAM methodology authors and contributors (A. Marrel, B. Iooss, V. Larget)
 
 ---
 
