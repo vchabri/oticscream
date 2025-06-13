@@ -1,83 +1,109 @@
-# OTICSCREAM
+# oticscream
 
-An OpenTURNS implementation of the ICSCREAM methodology.
+**oticscream** is a Python library that integrates the ICSCREAM methodology with [OpenTURNS](https://openturns.org/), enabling advanced sensitivity analysis, uncertainty quantification, and robust model exploration.
 
-## Getting Started
+## 📌 Overview
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
+This library implements the ICSCREAM (Incremental Construction of Surrogate-based Credible Risk Evaluation and Analysis Models) methodology using OpenTURNS components. It is designed to help practitioners build surrogate models efficiently and assess model sensitivity and uncertainty in a structured, repeatable way.
 
-### Prerequisites
+## ✨ Features
 
-- OpenTURNS
+- Full implementation of the ICSCREAM workflow
+- Integration with OpenTURNS for UQ and sensitivity analysis
+- Modular and extensible architecture
+- Automated unit tests and documentation
+- Suitable for industrial and academic use cases
 
-### Installing
+## 📦 Installation
 
-In the root folder, run:
+### Requirements
 
-```
+- Python 3.8+
+- [OpenTURNS](https://openturns.org/)
+- NumPy, SciPy, Matplotlib
+
+### Install with pip (local)
+
+Clone this repository and install it using pip:
+
+```bash
+git clone https://github.com/vchabri/oticscream.git
+cd oticscream
 pip install .
 ```
 
-### Build the documentation
+### Optional: Development Setup
 
-To build the sphinx documentation, run the following command
-in the root folder:
+For a development install with editable mode:
 
-```
-sphinx-build -j auto doc doc/install
-```
-
-## Running the tests
-
-Explain how to run the automated tests for this system
-
-### Break down into end to end tests
-
-Explain what these tests test and why
-
-```
-Give an example
+```bash
+pip install -e .[dev]
 ```
 
-### And coding style tests
+## 🛠 Usage
 
-Explain what these tests test and why
+Here's a minimal example of how to use `oticscream`:
 
+```python
+from oticscream.core import ICSCREAM
+
+# Define your model and input distribution
+# model = ...
+# input_distribution = ...
+
+ics = ICSCREAM(model=model, input_distribution=input_distribution)
+ics.run()
+results = ics.get_results()
 ```
-Give an example
+
+See the [documentation](#documentation) for full examples and API details.
+
+## 🧚‍♂️ Testing
+
+To run the test suite:
+
+```bash
+pytest test/
 ```
 
-## Deployment
+Make sure you have the development dependencies installed:
 
-Add additional notes about how to deploy this on a live system
+```bash
+pip install -r requirements-dev.txt
+```
 
-## Built With
+## 📚 Documentation
 
-* [Dropwizard](http://www.dropwizard.io/1.0.2/docs/) - The web framework used
-* [Maven](https://maven.apache.org/) - Dependency Management
-* [ROME](https://rometools.github.io/rome/) - Used to generate RSS Feeds
+Documentation is built using Sphinx. To build the HTML docs locally:
 
-## Contributing
+```bash
+cd doc
+make html
+```
 
-Please read [CONTRIBUTING.md](https://gist.github.com/PurpleBooth/b24679402957c63ec426) for details on our code of conduct, and the process for submitting pull requests to us.
+Output will be available in `doc/_build/html/index.html`.
 
-## Versioning
+## 🧠 Contributing
 
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/your/project/tags). 
+Contributions are welcome! To contribute:
 
-## Authors
+1. Fork the repository
+2. Create a new branch: `git checkout -b feature/your-feature-name`
+3. Commit your changes: `git commit -m 'Add your feature'`
+4. Push to the branch: `git push origin feature/your-feature-name`
+5. Open a pull request
 
-* **Billie Thompson** - *Initial work* - [PurpleBooth](https://github.com/PurpleBooth)
+Please ensure code passes tests and follows PEP8 conventions.
 
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
+## 📄 License
 
-## License
+This project is licensed under the GNU General Public License v3.0 – see the [COPYING](COPYING) file for details.
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+## 🙏 Acknowledgments
 
-## Acknowledgments
+- [OpenTURNS](https://openturns.org/)
+- ICSCREAM methodology authors and contributors
 
-* Hat tip to anyone whose code was used
-* Inspiration
-* etc
+---
 
+© 2025 - vchabri and contributors.
