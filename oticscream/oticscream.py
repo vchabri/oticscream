@@ -1126,7 +1126,7 @@ class Icscream:
 
         # Set the kriging algorithm
         # ---------------------------
-        kriging_algo = ot.KrigingAlgorithm(
+        kriging_algo = ot.GaussianProcessFitter(
             self._x_learn,
             self._y_learn,
             self._cov_kriging_model,
@@ -1181,8 +1181,13 @@ class Icscream:
 
         # Get kriging results and kriging metamodel
         # ---------------------------
-        self._kriging_result = kriging_algo.getResult()
+        gpf_result = kriging_algo.getResult()
+        gpr = ot.GaussianProcessRegression(gpf_result)
+        gpr.run()
+        self._kriging_result = gpr.getResult()
         self._kriging_metamodel = self._kriging_result.getMetaModel()
+        self._kriging_metamodel.setInputDescription(self._x_learn.getDescription())
+        self._kriging_metamodel.setOutputDescription(self._y_learn.getDescription())
 
         return kriging_algo
 
@@ -1240,8 +1245,9 @@ class Icscream:
             self._validation_results.getResidualSample()
         ).flatten()
 
+        cond_cov = ot.GaussianProcessConditionalCovariance(self._kriging_result)
         kriging_conditional_variance = np.array(
-            self._kriging_result.getConditionalMarginalVariance(self._x_validation)
+            cond_cov.getConditionalMarginalVariance(self._x_validation)
         )
 
         # Be careful about the definition of PVA (with/without absolute value)
@@ -1592,8 +1598,9 @@ class Icscream:
 
         # Apply the metamodel predictor and variance operators
         # --------------
-        mean_Gp = self._kriging_result.getConditionalMean(full_sample)
-        var_Gp = self._kriging_result.getConditionalMarginalVariance(full_sample)
+        cov_cond = ot.GaussianProcessConditionalCovariance(self._kriging_result)
+        mean_Gp = cov_cond.getConditionalMean(full_sample)
+        var_Gp = cov_cond.getConditionalMarginalVariance(full_sample)
 
         # Compute the ratio and integrand
         # --------------
