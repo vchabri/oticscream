@@ -15,6 +15,8 @@ import openturns as ot
 from oticscream import Icscream
 from example_modified_friedman_func import modifiedFriedman
 
+
+
 # %%
 # Modified Friedman function (ref Marrel et al. 2021)
 # ---------------------------

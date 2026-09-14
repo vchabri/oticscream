@@ -112,7 +112,10 @@ graph.setLegendPosition("bottomright")
 graph.setTitle("GP conditional mean")
 graph.setXTitle("Input value")
 v = View(graph)
-v.save("figures/Conditional_mean_GP.pdf")
+from pathlib import Path
+path = Path("figures/Conditional_mean_GP.pdf")
+path.parent.mkdir(parents=True, exist_ok=True)
+v.save(path)
 
 # %%
 # 1D conditional means from the reference function

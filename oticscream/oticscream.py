@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 # from matplotlib import rc, rcParams, stylercParams['text.usetex'] = Truerc('font', **{'family': 'Times'})rc('text', usetex=True)rc('font', size=16)# Set the default text font sizerc('axes', titlesize=20)# Set the axes title font sizerc('axes', labelsize=16)# Set the axes labels font sizerc('xtick', labelsize=14)# Set the font size for x tick labelsrc('ytick', labelsize=16)# Set the font size for y tick labelsrc('legend', fontsize=16)# Set the legend font size`
 import time as tm
 import pickle
+from pathlib import Path
 
 ot.Log.Show(ot.Log.NONE)
 import otkerneldesign as otkd
@@ -353,26 +354,26 @@ class Icscream:
         Instead, a placeholder string is saved. This behavior should be removed once the related
         bug is fixed in OpenTURNS.
         """
-        attribute_names = self.__dict__.keys()  # Get the list of attribute names
-        with open(filename, "wb") as f:
-            for name in attribute_names:
-                ## cf. Issue #2624 on openturns' github
-                if "study" in name and getattr(self, name) is not None:
-                    pickle.dump(
-                        "placeholder", f
-                    )  # Handle the case of a "_study_" (TO REMOVE ONCE BUG IS FIXED)
-                else:
-                    pickle.dump(
-                        getattr(self, name), f
-                    )  # Save the attributes of the self.__dict__
+        path = Path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {}
+        for name, value in self.__dict__.items():
+            ## cf. Issue #2624 on openturns' github
+            if "study" in name and value is not None:
+                data[name] = "placeholder"  # TO REMOVE ONCE BUG IS FIXED
+            else:
+                data[name] = value
+
+        with path.open("wb") as f:
+            pickle.dump(data, f)
 
     def load(self, filename):
         """
         Load and restore the object's attributes from a file.
 
-        This method restores the object's internal state by loading each attribute
-        from a binary file previously saved using the `save` method. It assumes that
-        the attributes are stored in the same order as they appear in `self.__dict__`.
+        This method restores the object's internal state by loading a dictionary
+        of attributes from a binary file previously saved using the `save` method.
 
         Parameters
         ----------
@@ -385,12 +386,10 @@ class Icscream:
         If such placeholders were saved, the corresponding attributes will be restored
         as the string `"placeholder"`, and should be manually reassigned if needed.
         """
-        attribute_names = self.__dict__.keys()  # Get the list of attribute names
         with open(filename, "rb") as f:
-            for name in attribute_names:
-                setattr(
-                    self, name, pickle.load(f)
-                )  # Load each attribute in the initial order
+            data = pickle.load(f)  # Load the dictionary of attributes
+        self.__dict__.clear()      # Remove any attribute that might already have been set
+        self.__dict__.update(data)  # Restore attributes onto the object
 
     def draw_output_sample_analysis(self):
         """
