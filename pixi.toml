@@ -1,0 +1,19 @@
+[workspace]
+channels = ["conda-forge"]
+name = "oticscream"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+openturns = ">=1.27.3,<2"
+scipy = ">=1.18.1,<2"
+matplotlib-base = ">=3.11.1,<4"
+pandas = ">=3.0.5,<4"
+ipykernel = ">=7.3.0,<8"
+scikit-learn = ">=1.9.1,<2"
+
+[pypi-dependencies]
+otkerneldesign = ">=0.1.4, <0.2"
+oticscream = { path = ".", editable = true }

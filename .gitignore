@@ -11,3 +11,6 @@ dist/*
 */auto_examples
 sg_execution_times.rst
 *_generated
+# pixi environments
+.pixi/*
+!.pixi/config.toml
