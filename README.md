@@ -4,11 +4,11 @@
 
 ## 📌 Overview
 
-This library implements the ICSCREAM (Identification of Penalizing Configurations in Computer Experiments Using Screening and Metamodel) methodology using OpenTURNS components. It is designed to help practitioners build surrogate models efficiently and assess model sensitivity and uncertainty in a structured, repeatable way, in order to identify penalizing input configurations.
+This library implements the ICSCREAM (Identification of Penalizing Configurations in Computer Experiments Using SCREeening And Metamodel) methodology using OpenTURNS components. It is designed to help practitioners build surrogate models efficiently and assess model sensitivity and uncertainty in a structured, repeatable way, in order to identify penalizing input configurations.
 
 ## ✨ Features
 
-- Full implementation of the ICSCREAM methodology
+- Full implementation of the ICSCREAM methodology for a fully reproducible and validated approach
 - Integration with OpenTURNS for given-data robust identification of penalizing input values
 - Modular and extensible architecture
 - Automated unit tests and documentation
