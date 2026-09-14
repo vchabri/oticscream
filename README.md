@@ -20,7 +20,7 @@ This library implements the ICSCREAM (Identification of Penalizing Configuration
 
 - Python 3.8+
 - [OpenTURNS](https://openturns.org/)
-- NumPy, SciPy, Matplotlib, Pandas
+- numpy, scipy, matplotlib, pandas, scikit-learn
 - [otkerneldesign](https://efekhari27.github.io/otkerneldesign/master/index.html#)
 
 ### Install with pip (local)
