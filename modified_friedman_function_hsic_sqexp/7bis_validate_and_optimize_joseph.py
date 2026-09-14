@@ -54,8 +54,9 @@ graph.setTitle("Q2 coefficient: %.2f" % q2)
 v = View(graph, scatter_kw={"alpha": 0.05, "marker": "*"})
 # %%
 kriging_result = icscream_7._kriging_result
+cov_cond = ot.GaussianProcessConditionalCovariance(kriging_result)
 # %%
-variance = kriging_result.getConditionalMarginalVariance(kriging_inputs)
+variance = cov_cond.getConditionalMarginalVariance(kriging_inputs)
 # %%
 std = np.sqrt(variance)
 
@@ -357,7 +358,7 @@ vmax = -np.inf
 
 grid = ot.GridLayout(dim - 1, dim - 1)
 grid.setTitle("GP exceedance probability with 2 fixed input variables")
-for i,xi in enumerate(icscream_7._X_Penalized[1:]): 
+for i,xi in enumerate(icscream_7._X_Penalized[1:], start=1): 
     for j,xj in enumerate(icscream_7._X_Penalized[0:i]):
         # Definition of 2D conditional mean function
         crossCutFunction = icscream_7.build_2D_conditional_exceedance_probability_as_PythonFunction(xi, xj)
