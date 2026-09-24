@@ -199,7 +199,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.16.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/wcwidth-0.8.3-pyhcf101f3_0.conda
-      - pypi: /home/g44079/Documents/THCOEURS_2026/oticscream
+      - pypi: ./
       - pypi: https://files.pythonhosted.org/packages/13/a2/44c755fba6162a65a83d27ff567d067c16c265c899c37482a89d12f83436/otkerneldesign-0.1.4-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-8_kmp_llvm.conda
@@ -3228,7 +3228,7 @@ packages:
   run_exports: {}
   size: 146490
   timestamp: 1788174996551
-- pypi: /home/g44079/Documents/THCOEURS_2026/oticscream
+- pypi: ./
   name: oticscream
   requires_dist:
   - numpy>=1.13
